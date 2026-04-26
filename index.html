@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CueTrack — Automated IEM Backing Tracks</title>
+  <meta name="description" content="Upload any song. AI detects sections and generates voice count-ins. Ready for your in-ear monitor in seconds." />
+  <!-- Fonts — using system font stack for zero dependencies -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  
+  <style>
+    :root {
+      --bg: #000000;
+      --fg: #ffffff;
+      --accent: #4A9D97;
+      --accent-hover: #5BB5AF;
+      --muted: rgba(255,255,255,0.5);
+      --border: rgba(255,255,255,0.08);
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--fg);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+    }
+    ::selection { background: rgba(74,157,151,0.3); }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #000; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+    
+    /* ── Nav ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 24px;
+      z-index: 50;
+    }
+    nav .logo { font-weight: 600; font-size: 14px; letter-spacing: 0.02em; }
+    nav .links { display: flex; gap: 32px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+    nav .links a { color: rgba(255,255,255,0.5); text-decoration: none; transition: color 0.2s; }
+    nav .links a:hover { color: #fff; }
+    @media (max-width: 768px) { nav .links { display: none; } }
+    
+    /* ── Hero ── */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .hero canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+    }
+    .hero-content {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      padding: 0 24px;
+      max-width: 800px;
+    }
+    .hero h1 {
+      font-size: clamp(36px, 8vw, 72px);
+      font-weight: 300;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin-bottom: 24px;
+    }
+    .hero p {
+      font-size: clamp(15px, 2vw, 18px);
+      line-height: 1.6;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 40px;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .hero-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 40px;
+    }
+    .hero-form input {
+      padding: 12px 24px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #fff;
+      font-size: 14px;
+      width: 280px;
+      font-family: var(--font);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .hero-form input::placeholder { color: rgba(255,255,255,0.3); }
+    .hero-form input:focus { border-color: var(--accent); }
+    .btn {
+      padding: 12px 32px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #000;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: var(--font);
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .hero-footer {
+      position: absolute;
+      bottom: 32px;
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 11px;
+      color: rgba(255,255,255,0.25);
+    }
+    .success-msg { color: var(--accent); font-size: 14px; }
+    
+    /* ── Section ── */
+    section {
+      padding: 128px 24px;
+      position: relative;
+    }
+    section .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    section h2 {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 300;
+      letter-spacing: -0.02em;
+      margin-bottom: 80px;
+      text-align: center;
+    }
+    
+    /* ── How ── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 48px;
+    }
+    .step-num {
+      font-size: 64px;
+      font-weight: 300;
+      color: rgba(74,157,151,0.25);
+      margin-bottom: 16px;
+    }
+    .step h3 {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+    .step p {
+      font-size: 14px;
+      line-height: 1.6;
+      color: rgba(255,255,255,0.4);
+    }
+    @media (max-width: 768px) {
+      .steps { grid-template-columns: 1fr; gap: 40px; }
+      .step-num { font-size: 48px; }
+    }
+    
+    /* ── Features ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .feature {
+      padding: 24px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.02);
+      transition: border-color 0.3s;
+    }
+    .feature:hover { border-color: rgba(74,157,151,0.4); }
+    .feature h3 { font-size: 14px; font-weight: 500; margin-bottom: 8px; }
+    .feature p { font-size: 13px; line-height: 1.6; color: rgba(255,255,255,0.4); }
+    @media (max-width: 768px) {
+      .features-grid { grid-template-columns: 1fr; }
+    }
+    
+    /* ── Waitlist ── */
+    .waitlist-section {
+      background: rgba(74,157,151,0.03);
+    }
+    .waitlist-section p { color: rgba(255,255,255,0.4); font-size: 14px; margin-bottom: 32px; }
+    
+    /* ── Footer ── */
+    footer {
+      padding: 32px 24px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    footer .inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: rgba(255,255,255,0.3);
+    }
+    footer a { color: rgba(255,255,255,0.3); text-decoration: none; margin-left: 24px; transition: color 0.2s; }
+    footer a:hover { color: #fff; }
+    @media (max-width: 600px) {
+      footer .inner { flex-direction: column; gap: 16px; text-align: center; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Nav -->
+  <nav>
+    <div class="logo">CueTrack</div>
+    <div class="links">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#waitlist">Waitlist</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <canvas id="viz"></canvas>
+    <div class="hero-content">
+      <h1>Automated IEM<br/>Backing Tracks</h1>
+      <p>Upload any song. AI detects sections and generates voice count-ins. Ready for your in-ear monitor in seconds.</p>
+      <div class="hero-form" id="heroForm">
+        <input type="email" id="heroEmail" placeholder="Enter your email" />
+        <button class="btn" onclick="submitHero()">Join waitlist</button>
+      </div>
+      <div id="heroSuccess" class="success-msg" style="display:none;">✓ You're on the list. We'll be in touch.</div>
+    </div>
+    <div class="hero-footer">Built by musicians, for musicians</div>
+  </section>
+
+  <!-- How It Works -->
+  <section id="how">
+    <div class="container">
+      <h2>How it works</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">01</div>
+          <h3>Upload</h3>
+          <p>Drag any song into CueTrack. MP3, WAV, AIFF — whatever you have.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">02</div>
+          <h3>Detect</h3>
+          <p>AI identifies verse, chorus, bridge, and transitions automatically.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">03</div>
+          <h3>Export</h3>
+          <p>Download your track with voice count-ins baked right in. Ready for IEM.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" style="border-top:1px solid rgba(255,255,255,0.06);">
+    <div class="container">
+      <h2>Features</h2>
+      <div class="features-grid">
+        <div class="feature">
+          <h3>Section Detection</h3>
+          <p>AI identifies verse, chorus, bridge, intro, and outro without manual marking.</p>
+        </div>
+        <div class="feature">
+          <h3>Voice Count-Ins</h3>
+          <p>"Chorus in 4... 3... 2... 1..." — generated automatically at every transition.</p>
+        </div>
+        <div class="feature">
+          <h3>IEM Ready</h3>
+          <p>Export WAV or MP3 with markers, compatible with LiveTrak, Playback, and Prime.</p>
+        </div>
+        <div class="feature">
+          <h3>Custom Cues</h3>
+          <p>Add your own voice cues — "Solo section", "Key change", "Tag" — anything.</p>
+        </div>
+        <div class="feature">
+          <h3>Batch Process</h3>
+          <p>Upload a whole setlist. Get every track processed while you grab coffee.</p>
+        </div>
+        <div class="feature">
+          <h3>Fine-Tune</h3>
+          <p>Adjust timing, marker placement, and voice level for each track.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Waitlist -->
+  <section id="waitlist" class="waitlist-section">
+    <div class="container" style="text-align:center;">
+      <h2>Join the waitlist</h2>
+      <p>Be the first to try CueTrack. Early access members get lifetime pricing.</p>
+      <div class="hero-form" id="waitlistForm">
+        <input type="email" id="waitlistEmail" placeholder="Enter your email" />
+        <button class="btn" onclick="submitWaitlist()">Get early access</button>
+      </div>
+      <div id="waitlistSuccess" class="success-msg" style="display:none;">✓ You're on the list. We'll be in touch.</div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="inner">
+      <div>© 2026 CueTrack</div>
+      <div>
+        <a href="#">Twitter</a>
+        <a href="#">GitHub</a>
+        <a href="#">Contact</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script>
+    /* ── Audio Visualizer ── */
+    const canvas = document.getElementById('viz');
+    const ctx = canvas.getContext('2d');
+    let w, h, dpr = window.devicePixelRatio || 1;
+    let time = 0;
+
+    function resize() {
+      w = canvas.width = canvas.offsetWidth * dpr;
+      h = canvas.height = canvas.offsetHeight * dpr;
+      ctx.scale(dpr, dpr);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    const bars = 128;
+    const particles = [];
+
+    function spawnParticle() {
+      particles.push({
+        x: Math.random() * (w/dpr),
+        y: h/dpr * 0.5 + (Math.random() - 0.5) * 40,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.3,
+        life: 0,
+        maxLife: 100 + Math.random() * 200,
+      });
+    }
+
+    function draw() {
+      time += 0.016;
+      const dw = w / dpr, dh = h / dpr;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.fillRect(0, 0, dw, dh);
+
+      // Frequency bars
+      const bw = dw / bars;
+      for (let i = 0; i < bars; i++) {
+        const x = i * bw;
+        const f = i / bars;
+        const a = Math.sin(f * Math.PI * 4 + time * 2) * 0.5 + 0.5;
+        const n = Math.sin(i * 0.1 + time * 3) * 0.3;
+        const bh = (a + n) * dh * 0.35;
+        const g = ctx.createLinearGradient(0, dh * 0.5 - bh, 0, dh * 0.5 + bh);
+        g.addColorStop(0, `rgba(74,157,151,${0.6*a})`);
+        g.addColorStop(0.5, `rgba(74,157,151,${0.2*a})`);
+        g.addColorStop(1, 'rgba(74,157,151,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x, dh * 0.5 - bh, bw - 1, bh * 2);
+      }
+
+      // Waveform
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(74,157,151,0.8)';
+      ctx.lineWidth = 1.5;
+      for (let x = 0; x < dw; x += 2) {
+        const t = x / dw;
+        const y = dh * 0.5 +
+          Math.sin(t * Math.PI * 8 + time * 4) * 20 +
+          Math.sin(t * Math.PI * 16 + time * 6) * 10 +
+          Math.sin(t * Math.PI * 32 + time * 8) * 5;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Particles
+      if (Math.random() < 0.3) spawnParticle();
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life++;
+        p.x += p.vx;
+        p.y += p.vy;
+        const alpha = 1 - p.life / p.maxLife;
+        if (alpha <= 0) { particles.splice(i, 1); continue; }
+        ctx.fillStyle = `rgba(74,157,151,${alpha * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1.5 * alpha, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      requestAnimationFrame(draw);
+    }
+    draw();
+
+    /* ── Form handling ── */
+    function submitHero() {
+      const email = document.getElementById('heroEmail').value;
+      if (email) {
+        document.getElementById('heroForm').style.display = 'none';
+        document.getElementById('heroSuccess').style.display = 'block';
+        // TODO: send to waitlist API
+      }
+    }
+    function submitWaitlist() {
+      const email = document.getElementById('waitlistEmail').value;
+      if (email) {
+        document.getElementById('waitlistForm').style.display = 'none';
+        document.getElementById('waitlistSuccess').style.display = 'block';
+        // TODO: connect to waitlist API
+      }
+    }
+  </script>
+</body>
+</html>
