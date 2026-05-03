@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
 
+// ---------- Waveform Visualization ----------
+
 function WaveformCanvas({
   audioUrl,
   currentTime,
@@ -125,6 +127,8 @@ function WaveformCanvas({
   );
 }
 
+// ---------- Audio Player ----------
+
 function AudioPlayer({ src }: { src: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -153,11 +157,7 @@ function AudioPlayer({ src }: { src: string }) {
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (isPlaying) {
-      audio.pause();
-    } else {
-      audio.play();
-    }
+    if (isPlaying) { audio.pause(); } else { audio.play(); }
     setIsPlaying(!isPlaying);
   }, [isPlaying]);
 
@@ -177,14 +177,7 @@ function AudioPlayer({ src }: { src: string }) {
   return (
     <div className="space-y-3">
       <audio ref={audioRef} src={src} preload="metadata" />
-
-      <WaveformCanvas
-        audioUrl={src}
-        currentTime={currentTime}
-        duration={duration}
-        onSeek={seek}
-      />
-
+      <WaveformCanvas audioUrl={src} currentTime={currentTime} duration={duration} onSeek={seek} />
       <div className="flex items-center gap-4">
         <button
           type="button"
@@ -202,25 +195,22 @@ function AudioPlayer({ src }: { src: string }) {
             </svg>
           )}
         </button>
-
         <div className="flex items-center gap-2 font-mono text-xs text-muted">
           <span>{formatTime(currentTime)}</span>
           <span>/</span>
           <span>{formatTime(duration)}</span>
         </div>
-
         <div className="flex-1">
           <div className="progress-bar">
-            <div
-              className="progress-fill"
-              style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : '0%' }}
-            />
+            <div className="progress-fill" style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : '0%' }} />
           </div>
         </div>
       </div>
     </div>
   );
 }
+
+// ---------- Track Detail Page ----------
 
 export default function TrackDetailPage() {
   const params = useParams();
@@ -252,9 +242,7 @@ export default function TrackDetailPage() {
       const res = await fetch(`/api/tracks/${trackId}/checkout`, { method: 'POST' });
       if (!res.ok) throw new Error('Checkout failed');
       const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      }
+      if (data.url) { window.location.href = data.url; }
     } catch {
       setError('Failed to start checkout. Please try again.');
     } finally {
@@ -292,11 +280,6 @@ export default function TrackDetailPage() {
             <div className="skeleton h-10 w-72" />
             <div className="skeleton h-6 w-48" />
             <div className="skeleton h-24 w-full rounded-lg" />
-            <div className="grid grid-cols-3 gap-4">
-              <div className="skeleton h-20 rounded-lg" />
-              <div className="skeleton h-20 rounded-lg" />
-              <div className="skeleton h-20 rounded-lg" />
-            </div>
           </div>
         </main>
       </>
@@ -309,13 +292,9 @@ export default function TrackDetailPage() {
         <Nav />
         <main className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
           <div className="text-center py-20">
-            <h1 className="font-display text-3xl font-semibold text-[#F0EDE6] mb-3">
-              Track Not Found
-            </h1>
+            <h1 className="font-display text-3xl font-semibold text-[#F0EDE6] mb-3">Track Not Found</h1>
             <p className="text-muted mb-6">{error || 'The track you are looking for does not exist.'}</p>
-            <a href="/create">
-              <Button variant="primary">Create a New Track</Button>
-            </a>
+            <a href="/create"><Button variant="primary">Create a New Track</Button></a>
           </div>
         </main>
         <Footer />
@@ -325,14 +304,7 @@ export default function TrackDetailPage() {
 
   const totalBars = track.spec.sections.reduce((sum, s) => sum + s.bars, 0);
   const tsLabel = `${track.spec.timeSignature.beats}/${track.spec.timeSignature.subdivision}`;
-  const createdDate = new Date(track.createdAt).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
+  const createdDate = new Date(track.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const isPaid = track.fullUrl !== null;
   const isRendering = track.status === 'rendering';
 
@@ -342,30 +314,19 @@ export default function TrackDetailPage() {
       <main className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <span
-              className={cn(
-                'badge',
-                track.status === 'ready' && 'badge-green',
-                track.status === 'rendering' && 'badge-accent',
-                track.status === 'failed' && 'badge-red',
-              )}
-            >
+            <span className={cn('badge', track.status === 'ready' && 'badge-green', track.status === 'rendering' && 'badge-accent', track.status === 'failed' && 'badge-red')}>
               {track.status === 'ready' && 'Ready'}
               {track.status === 'rendering' && 'Rendering...'}
               {track.status === 'failed' && 'Failed'}
             </span>
             <span className="badge badge-muted font-mono uppercase">{track.spec.format}</span>
           </div>
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#F0EDE6] sm:text-5xl">
-            {track.title}
-          </h1>
+          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#F0EDE6] sm:text-5xl">{track.title}</h1>
           <p className="mt-2 text-sm text-muted">Created {createdDate}</p>
         </div>
 
         {track.previewUrl && track.status === 'ready' && (
-          <Card className="mb-8">
-            <AudioPlayer src={track.previewUrl} />
-          </Card>
+          <Card className="mb-8"><AudioPlayer src={track.previewUrl} /></Card>
         )}
 
         {isRendering && (
@@ -402,16 +363,6 @@ export default function TrackDetailPage() {
           </div>
         </Card>
 
-        <Card header="Track Options" className="mb-8">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <div><p className="font-mono text-xs uppercase text-muted tracking-wider">Click Sound</p><p className="text-sm text-[#F0EDE6] mt-0.5 capitalize">{track.spec.clickSound}</p></div>
-            <div><p className="font-mono text-xs uppercase text-muted tracking-wider">Count-in</p><p className="text-sm text-[#F0EDE6] mt-0.5">{track.spec.enableCountIn ? `${track.spec.countInBars} bar${track.spec.countInBars > 1 ? 's' : ''}` : 'Off'}</p></div>
-            <div><p className="font-mono text-xs uppercase text-muted tracking-wider">Section Cues</p><p className="text-sm text-[#F0EDE6] mt-0.5">{track.spec.enableSectionAnnounce ? 'On' : 'Off'}</p></div>
-            <div><p className="font-mono text-xs uppercase text-muted tracking-wider">Bar Countdown</p><p className="text-sm text-[#F0EDE6] mt-0.5">{track.spec.enableBarCountdown ? 'On' : 'Off'}</p></div>
-            <div><p className="font-mono text-xs uppercase text-muted tracking-wider">Format</p><p className="text-sm text-[#F0EDE6] mt-0.5 font-mono uppercase">{track.spec.format}</p></div>
-          </div>
-        </Card>
-
         {track.status === 'ready' && (
           <div className="flex flex-col items-center gap-3 pt-4">
             {isPaid ? (
@@ -427,9 +378,7 @@ export default function TrackDetailPage() {
                 Download Full Track &mdash; $3
               </Button>
             )}
-            <p className="text-xs text-muted">
-              {isPaid ? `${track.spec.format.toUpperCase()} file, studio quality` : 'One-time payment. No subscription required.'}
-            </p>
+            <p className="text-xs text-muted">{isPaid ? `${track.spec.format.toUpperCase()} file, studio quality` : 'One-time payment. No subscription required.'}</p>
           </div>
         )}
       </main>
