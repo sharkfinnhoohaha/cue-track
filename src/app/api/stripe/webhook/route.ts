@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 
+// ---------------------------------------------------------------------------
+// POST /api/stripe/webhook
+// ---------------------------------------------------------------------------
+
 export async function POST(request: NextRequest) {
+  // --- Guard: Stripe env vars -------------------------------------------
   if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
     console.warn('[stripe/webhook] Stripe env vars not configured');
     return NextResponse.json(
@@ -10,6 +15,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // --- Read raw body for signature verification -------------------------
   const rawBody = await request.text();
   const signature = request.headers.get('stripe-signature');
 
@@ -20,6 +26,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // --- Verify signature -------------------------------------------------
   let event: Stripe.Event;
   try {
     const StripeModule = (await import('stripe')).default;
@@ -40,6 +47,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // --- Handle events ----------------------------------------------------
   try {
     switch (event.type) {
       case 'checkout.session.completed':
@@ -59,11 +67,17 @@ export async function POST(request: NextRequest) {
     }
   } catch (handlerErr) {
     console.error(`[stripe/webhook] Error handling ${event.type}:`, handlerErr);
+    // Return 200 anyway to prevent Stripe retries for handler errors
+    // that are unlikely to self-resolve. Log + alert instead.
     return NextResponse.json({ received: true, handlerError: true });
   }
 
   return NextResponse.json({ received: true });
 }
+
+// ---------------------------------------------------------------------------
+// Event handlers
+// ---------------------------------------------------------------------------
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const plan = session.metadata?.plan;
@@ -81,6 +95,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const { eq } = await import('drizzle-orm');
 
   if (plan === 'single' && trackId) {
+    // --- Single track purchase ------------------------------------------
     await db.insert(purchases).values({
       trackId,
       stripeSessionId: session.id,
@@ -95,6 +110,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
     console.info(`[stripe/webhook] Purchase recorded for track ${trackId}`);
   } else if (plan === 'pro') {
+    // --- Pro subscription -----------------------------------------------
     const customerId =
       typeof session.customer === 'string'
         ? session.customer
@@ -105,6 +121,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         : session.subscription?.id ?? null;
 
     if (email) {
+      // Upsert user: update if exists, insert if not
       const existing = await db
         .select({ id: users.id })
         .from(users)
@@ -142,6 +159,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   const { db, users } = await import('@/lib/db');
   const { eq } = await import('drizzle-orm');
 
+  // Map Stripe status to our enum
   type OurStatus = 'active' | 'past_due' | 'canceled' | 'none';
   const statusMap: Record<string, OurStatus> = {
     active: 'active',
