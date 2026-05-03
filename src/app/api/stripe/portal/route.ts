@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { ApiError } from '@/types';
 
+// ---------------------------------------------------------------------------
+// POST /api/stripe/portal
+// ---------------------------------------------------------------------------
+
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {
@@ -28,6 +32,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // --- Stripe not configured -> demo mode --------------------------------
+
   if (!process.env.STRIPE_SECRET_KEY) {
     console.warn('[stripe/portal] STRIPE_SECRET_KEY not set -- returning demo URL');
     return NextResponse.json({
@@ -35,6 +41,8 @@ export async function POST(request: NextRequest) {
       demo: true,
     });
   }
+
+  // --- Create billing portal session ------------------------------------
 
   try {
     const Stripe = (await import('stripe')).default;
