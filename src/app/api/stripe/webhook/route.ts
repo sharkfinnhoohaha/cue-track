@@ -1,198 +1,97 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type Stripe from 'stripe';
 
-// ---------------------------------------------------------------------------
-// POST /api/stripe/webhook
-// ---------------------------------------------------------------------------
-
 export async function POST(request: NextRequest) {
-  // --- Guard: Stripe env vars -------------------------------------------
   if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
     console.warn('[stripe/webhook] Stripe env vars not configured');
-    return NextResponse.json(
-      { error: 'Stripe webhook not configured' },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: 'Stripe webhook not configured' }, { status: 500 });
   }
 
-  // --- Read raw body for signature verification -------------------------
   const rawBody = await request.text();
   const signature = request.headers.get('stripe-signature');
 
   if (!signature) {
-    return NextResponse.json(
-      { error: 'Missing stripe-signature header' },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 });
   }
 
-  // --- Verify signature -------------------------------------------------
   let event: Stripe.Event;
   try {
     const StripeModule = (await import('stripe')).default;
-    const stripe = new StripeModule(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2024-11-20.acacia',
-    });
-
-    event = stripe.webhooks.constructEvent(
-      rawBody,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET,
-    );
+    const stripe = new StripeModule(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' });
+    event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error('[stripe/webhook] Signature verification failed:', err);
-    return NextResponse.json(
-      { error: 'Webhook signature verification failed' },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: 'Webhook signature verification failed' }, { status: 400 });
   }
 
-  // --- Handle events ----------------------------------------------------
   try {
     switch (event.type) {
       case 'checkout.session.completed':
         await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
         break;
-
       case 'customer.subscription.updated':
         await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
         break;
-
       case 'customer.subscription.deleted':
         await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
         break;
-
       default:
         console.info(`[stripe/webhook] Unhandled event type: ${event.type}`);
     }
   } catch (handlerErr) {
     console.error(`[stripe/webhook] Error handling ${event.type}:`, handlerErr);
-    // Return 200 anyway to prevent Stripe retries for handler errors
-    // that are unlikely to self-resolve. Log + alert instead.
     return NextResponse.json({ received: true, handlerError: true });
   }
 
   return NextResponse.json({ received: true });
 }
 
-// ---------------------------------------------------------------------------
-// Event handlers
-// ---------------------------------------------------------------------------
-
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const plan = session.metadata?.plan;
   const trackId = session.metadata?.trackId;
   const email = session.customer_email ?? session.customer_details?.email ?? '';
 
-  console.info(`[stripe/webhook] checkout.session.completed: plan=${plan} trackId=${trackId} email=${email}`);
-
-  if (!process.env.DATABASE_URL) {
-    console.warn('[stripe/webhook] DATABASE_URL not set -- skipping DB writes');
-    return;
-  }
+  if (!process.env.DATABASE_URL) { console.warn('[stripe/webhook] DATABASE_URL not set -- skipping DB writes'); return; }
 
   const { db, purchases, users } = await import('@/lib/db');
   const { eq } = await import('drizzle-orm');
 
   if (plan === 'single' && trackId) {
-    // --- Single track purchase ------------------------------------------
     await db.insert(purchases).values({
       trackId,
       stripeSessionId: session.id,
-      stripePaymentIntent:
-        typeof session.payment_intent === 'string'
-          ? session.payment_intent
-          : session.payment_intent?.id ?? null,
+      stripePaymentIntent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id ?? null,
       status: 'paid',
       email: email || 'unknown',
       amountCents: session.amount_total ?? 300,
     });
-
-    console.info(`[stripe/webhook] Purchase recorded for track ${trackId}`);
   } else if (plan === 'pro') {
-    // --- Pro subscription -----------------------------------------------
-    const customerId =
-      typeof session.customer === 'string'
-        ? session.customer
-        : session.customer?.id ?? null;
-    const subscriptionId =
-      typeof session.subscription === 'string'
-        ? session.subscription
-        : session.subscription?.id ?? null;
+    const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null;
+    const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id ?? null;
 
     if (email) {
-      // Upsert user: update if exists, insert if not
-      const existing = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.email, email))
-        .limit(1);
-
+      const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
       if (existing.length > 0) {
-        await db
-          .update(users)
-          .set({
-            stripeCustomerId: customerId,
-            subscriptionStatus: 'active',
-            subscriptionId,
-          })
-          .where(eq(users.email, email));
+        await db.update(users).set({ stripeCustomerId: customerId, subscriptionStatus: 'active', subscriptionId }).where(eq(users.email, email));
       } else {
-        await db.insert(users).values({
-          email,
-          stripeCustomerId: customerId,
-          subscriptionStatus: 'active',
-          subscriptionId,
-        });
+        await db.insert(users).values({ email, stripeCustomerId: customerId, subscriptionStatus: 'active', subscriptionId });
       }
-
-      console.info(`[stripe/webhook] Pro subscription activated for ${email}`);
     }
   }
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
-  console.info(`[stripe/webhook] subscription.updated: ${subscription.id} status=${subscription.status}`);
-
   if (!process.env.DATABASE_URL) return;
-
   const { db, users } = await import('@/lib/db');
   const { eq } = await import('drizzle-orm');
-
-  // Map Stripe status to our enum
   type OurStatus = 'active' | 'past_due' | 'canceled' | 'none';
-  const statusMap: Record<string, OurStatus> = {
-    active: 'active',
-    past_due: 'past_due',
-    canceled: 'canceled',
-    unpaid: 'past_due',
-    incomplete: 'none',
-    incomplete_expired: 'canceled',
-    trialing: 'active',
-    paused: 'canceled',
-  };
-
-  const ourStatus: OurStatus = statusMap[subscription.status] ?? 'none';
-
-  await db
-    .update(users)
-    .set({ subscriptionStatus: ourStatus })
-    .where(eq(users.subscriptionId, subscription.id));
+  const statusMap: Record<string, OurStatus> = { active: 'active', past_due: 'past_due', canceled: 'canceled', unpaid: 'past_due', incomplete: 'none', incomplete_expired: 'canceled', trialing: 'active', paused: 'canceled' };
+  await db.update(users).set({ subscriptionStatus: statusMap[subscription.status] ?? 'none' }).where(eq(users.subscriptionId, subscription.id));
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
-  console.info(`[stripe/webhook] subscription.deleted: ${subscription.id}`);
-
   if (!process.env.DATABASE_URL) return;
-
   const { db, users } = await import('@/lib/db');
   const { eq } = await import('drizzle-orm');
-
-  await db
-    .update(users)
-    .set({
-      subscriptionStatus: 'canceled',
-      subscriptionId: null,
-    })
-    .where(eq(users.subscriptionId, subscription.id));
+  await db.update(users).set({ subscriptionStatus: 'canceled', subscriptionId: null }).where(eq(users.subscriptionId, subscription.id));
 }
