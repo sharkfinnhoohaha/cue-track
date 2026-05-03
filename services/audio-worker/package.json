@@ -1,0 +1,20 @@
+{
+  "name": "@cuetrack/audio-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloud Run worker for Cue Track audio rendering",
+  "scripts": {
+    "start": "node --experimental-strip-types server.ts",
+    "dev": "node --watch --experimental-strip-types server.ts",
+    "test": "node --experimental-strip-types test/smoke.ts"
+  },
+  "dependencies": {
+    "@google-cloud/text-to-speech": "^5.5.0",
+    "@google-cloud/storage": "^7.14.0",
+    "lamejs": "^1.2.1"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
