@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { ApiError } from '@/types';
 
+// ---------------------------------------------------------------------------
+// POST /api/waitlist
+// ---------------------------------------------------------------------------
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(request: NextRequest) {
@@ -38,6 +42,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // For now, log the signup. In production this would write to DB / mailing list.
   console.info(`[waitlist] New signup: ${trimmed}`);
 
   return NextResponse.json({ success: true });
