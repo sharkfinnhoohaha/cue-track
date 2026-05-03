@@ -8,24 +8,13 @@
 
 ### Who Buys Click Tracks
 
-Click tracks are used by any live performer who needs to stay locked to a tempo — but the primary buyer segments are:
+**Worship bands** are the largest addressable market. Modern worship music is heavily produced and arrangement-dependent. With in-ear monitors now standard in mid-size and large churches, click tracks have moved from "nice to have" to infrastructure.
 
-**Worship bands** are the largest addressable market for web-based click/cue tools. Modern worship music is heavily produced and arrangement-dependent: songs modulate mid-song, have defined section structures, and are often performed alongside backing tracks or stem playback. Without a click, live sections drift against the fixed stems. With in-ear monitors now standard equipment in mid-size and large churches, click tracks have moved from "nice to have" to infrastructure.
+**Original-music touring bands** need click tracks for sets that run alongside pre-recorded elements. Their songs are not in any commercial catalog.
 
-**Original-music touring bands** need click tracks for any set that runs alongside pre-recorded elements — synth stems, triggered samples, lights, video. Their songs are not in any commercial catalog, which means they cannot use MultiTracks or Loop Community for click+cue generation.
+**Studio session musicians and rehearsal drummers** use click tracks for a fixed tempo reference.
 
-**Studio session musicians and rehearsal drummers** use click tracks to record or rehearse to a fixed tempo. The need here is simpler — a pure metronomic reference — but voice cues add value for section navigation without staring at a screen.
-
-**Corporate event and theater musicians** sync to video playback or scripted cues and need click tracks with precise section markers.
-
-### Why Click Tracks Exist
-
-A click track solves two distinct problems:
-
-1. **Tempo consistency** — live musicians drift. A click prevents the song from rushing into the chorus or dragging through the bridge.
-2. **Coordination** — in IEM environments, band members can hear the click but not necessarily each other at full level. Voice cues ("Chorus in 2...") let a drummer, bassist, and keys player navigate a song structure without eye contact or visual cues from a bandleader.
-
-The second function — coordination via voice cues — is where most current tools fall short. A metronome solves (1). A cue track solves (1) and (2). Cue Track is specifically built for both.
+**Corporate event and theater musicians** sync to video playback or scripted cues.
 
 ---
 
@@ -33,24 +22,34 @@ The second function — coordination via voice cues — is where most current to
 
 | Provider | Price | Custom Song Structure? | Web-Based? | Voice Cues? | Key Limitation |
 |---|---|---|---|---|---|
-| **Loop Community Prime** | Free basic; Standard $9/mo; Plus $18/mo (annual) | Rearrange existing sections on uploaded tracks; fixed sections on catalog songs | No — iOS/Mac only | Auto-generated TTS cues on Standard+; catalog tracks include section cues | Catalog-dependent for voice cues; custom songs require DAW export first; dynamic click breaks on tempo/time-sig changes |
-| **MultiTracks Playback** | Free; Premium $9.99/mo; Live Bundle $29.99/mo | Add/remove/reorder sections; edit live | No — iOS/Mac only | Dynamic voice cues for 24,000+ songs; locked behind Live Bundle ($29.99/mo) | Catalog-only for guide cues; custom click+cue requires expensive tier; no web generation |
-| **Worship Online** | $18/mo solo; $37/mo up to 5; $59/mo up to 10 | No — not a click generator | No — streaming tutorials only | No | Not a click track tool; tutorial and rehearsal platform only |
-| **Tempo by Frozen Ape** | $2.99 one-time (iOS/Android) | Setlists with BPM + time sig per song; one BPM per song, no sections | No — mobile app | No — metronome only; 2-bar count-in voice at most | No section markers within a song; no spoken cues; no audio export |
-| **LiveTrackz** | $5.99/mo; $49.99/yr | Upload own loops; no custom song structure builder | No — iOS/Android | No — loops and click tracks from catalog | No custom song structure; no voice cues; no audio file export |
-| **SetClick Pro** | Free | BPM + time sig per song; setlist management | Yes — PWA | No — visual flash sync only | No audio output; no voice cues; no within-song section markers |
-| **Ableton Live** | $449 Standard / $749 Suite | Full timeline editing | No — desktop DAW | Manual creation only (MIDI/audio); no built-in cue generator | Steep learning curve; built-in click is widely condemned; requires multi-output audio interface; full DAW overhead for click use |
-| **Pro Tools** | $9.99–$99.99/mo | Full timeline with tempo/time-sig markers | No — desktop DAW | Manual creation only | Same DAW complexity; overkill for click-only use |
+| **Loop Community Prime** | Free basic; Standard $9/mo; Plus $18/mo | Rearrange sections on uploaded tracks | No — iOS/Mac only | TTS cues on Standard+; catalog only | Catalog-dependent for voice cues |
+| **MultiTracks Playback** | Free; Premium $9.99/mo; Live Bundle $29.99/mo | Add/remove/reorder sections | No — iOS/Mac only | Voice cues locked behind $29.99/mo | Catalog-only; no web generation |
+| **Tempo by Frozen Ape** | $2.99 one-time | BPM + time sig per song; no sections | No — mobile | No — metronome only | No section markers; no audio export |
+| **SetClick Pro** | Free | BPM + time sig per song | Yes — PWA | No — visual flash only | No audio output; no voice cues |
+| **Ableton Live** | $449 Standard | Full timeline | No — desktop DAW | Manual creation only | Steep learning curve; overkill |
 
 ---
 
-## 3. Gap Analysis and Cue Track Positioning
+## 3. User Pain Points
+
+### Pain Point 1: Locked to commercial catalogs for voice cues
+Churches playing original songs or obscure songs have no path to a voice-cued track without building it manually in a DAW.
+
+### Pain Point 2: DAW required for custom tracks
+High barrier to entry. Most worship teams don't have a dedicated DAW operator.
+
+### Pain Point 3: Voice cues paywalled at high subscription tiers
+Getting voiced section cues from MultiTracks requires the Live Bundle at $29.99/mo.
+
+---
+
+## 4. Gap Analysis and Positioning
 
 ### The Gap
 
 No tool currently lets a musician:
-- Enter a custom song structure (e.g., Intro 4 bars / Verse 8 / Chorus 8 / Bridge 4 / Outro 4)
-- Specify BPM and time signature per section
+- Enter a custom song structure (Intro 4 bars / Verse 8 / Chorus 8 / Bridge 4 / Outro 4)
+- Specify BPM and time signature
 - Receive a downloadable audio file with spoken section cues embedded
 - Do all of this in a web browser, without installing an app or knowing how to use a DAW
 
@@ -62,6 +61,16 @@ No tool currently lets a musician:
 
 - **Web-based** — no app install required
 - **Any song** — custom song structure builder, not catalog-dependent
-- **Generate and download** — WAV/MP3 output for use anywhere
+- **Generate and download** — WAV/MP3 output for use in any playback app
 - **No DAW required**
-- **Pay per track or subscribe** — $3 single track or $19/mo Pro
+- **Pay per track or subscribe** — no commitment required
+
+---
+
+## 5. Pricing Rationale
+
+### $3 per track
+Anchor to impulse-buy territory. Less than a cup of coffee, well below the cognitive threshold for hesitation. A worship leader who needs a click track for one song this Sunday will pay $3 to have it in two minutes rather than spending two hours in Ableton.
+
+### $19/month Pro
+Cheaper than MultiTracks' cue-capable tier ($29.99/mo) while offering broader functionality. At $19/mo, a team generating 20 tracks/month pays $0.95/track.
