@@ -4,6 +4,10 @@ import EmailProvider from 'next-auth/providers/email';
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
 import type { SubscriptionStatus } from '@/types';
 
+// ---------------------------------------------------------------------------
+// Extend the default session/JWT types to include our custom fields
+// ---------------------------------------------------------------------------
+
 declare module 'next-auth' {
   interface Session {
     user: {
@@ -30,10 +34,17 @@ declare module 'next-auth/jwt' {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Build config
+// ---------------------------------------------------------------------------
+
 function buildAuthConfig(): NextAuthConfig {
+  // Adapter: only attach if DATABASE_URL is configured
   let adapter: NextAuthConfig['adapter'] | undefined;
   if (process.env.DATABASE_URL) {
     try {
+      // We dynamically require the DB here to avoid crashing when
+      // DATABASE_URL is not available (demo / build mode).
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { db } = require('@/lib/db') as { db: Parameters<typeof DrizzleAdapter>[0] };
       adapter = DrizzleAdapter(db);
@@ -61,6 +72,7 @@ function buildAuthConfig(): NextAuthConfig {
         },
         from: process.env.EMAIL_FROM ?? 'Cue Track <noreply@cuetrack.app>',
 
+        // Use Resend if configured (takes precedence over generic SMTP)
         ...(process.env.RESEND_API_KEY
           ? {
               sendVerificationRequest: async ({ identifier: email, url }) => {
@@ -104,12 +116,14 @@ function buildAuthConfig(): NextAuthConfig {
 
     callbacks: {
       async jwt({ token, user }) {
+        // On initial sign-in, user is populated
         if (user) {
           token.id = user.id as string;
           token.subscriptionStatus = (user as Record<string, unknown>).subscriptionStatus as SubscriptionStatus ?? 'none';
           token.stripeCustomerId = (user as Record<string, unknown>).stripeCustomerId as string | null ?? null;
         }
 
+        // Periodically refresh subscription status from DB
         if (process.env.DATABASE_URL && token.id) {
           try {
             const { db, users } = await import('@/lib/db');
@@ -150,6 +164,10 @@ function buildAuthConfig(): NextAuthConfig {
 
   return config;
 }
+
+// ---------------------------------------------------------------------------
+// Export route handlers
+// ---------------------------------------------------------------------------
 
 const authConfig = buildAuthConfig();
 const handler = NextAuth(authConfig);
