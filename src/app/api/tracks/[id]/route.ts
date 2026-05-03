@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import type { ApiError, TrackRecord } from '@/types';
 
+// ---------------------------------------------------------------------------
+// GET /api/tracks/[id]
+// ---------------------------------------------------------------------------
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } },
@@ -15,6 +19,7 @@ export async function GET(
     );
   }
 
+  // Lightweight UUID format check (v4 hex pattern)
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRe.test(id)) {
     return NextResponse.json<ApiError>(
@@ -23,7 +28,9 @@ export async function GET(
     );
   }
 
+  // --- Database lookup ---------------------------------------------------
   if (!process.env.DATABASE_URL) {
+    // Demo mode: return a mock record so the frontend can still render
     return NextResponse.json<TrackRecord>({
       id,
       title: 'Demo Track',

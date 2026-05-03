@@ -6,6 +6,10 @@ import type { SongSpec, ApiError } from '@/types';
 
 export const maxDuration = 60;
 
+// ---------------------------------------------------------------------------
+// Validation helpers
+// ---------------------------------------------------------------------------
+
 const VALID_CLICK_SOUNDS = ['classic', 'woodblock', 'rimshot', 'hi-hat'] as const;
 const VALID_FORMATS = ['wav', 'mp3'] as const;
 
@@ -18,6 +22,7 @@ function validateSpec(body: unknown): { spec: SongSpec; errors: string[] } {
 
   const b = body as Record<string, unknown>;
 
+  // title
   if (typeof b.title !== 'string' || b.title.trim().length === 0) {
     errors.push('title is required and must be a non-empty string');
   }
@@ -25,12 +30,14 @@ function validateSpec(body: unknown): { spec: SongSpec; errors: string[] } {
     errors.push('title must be 200 characters or fewer');
   }
 
+  // bpm
   if (typeof b.bpm !== 'number' || !Number.isFinite(b.bpm)) {
     errors.push('bpm is required and must be a number');
   } else if (b.bpm < 30 || b.bpm > 300) {
     errors.push('bpm must be between 30 and 300');
   }
 
+  // timeSignature
   if (!b.timeSignature || typeof b.timeSignature !== 'object') {
     errors.push('timeSignature is required');
   } else {
@@ -43,6 +50,7 @@ function validateSpec(body: unknown): { spec: SongSpec; errors: string[] } {
     }
   }
 
+  // sections
   if (!Array.isArray(b.sections) || b.sections.length === 0) {
     errors.push('sections must be a non-empty array');
   } else {
@@ -69,18 +77,22 @@ function validateSpec(body: unknown): { spec: SongSpec; errors: string[] } {
     }
   }
 
+  // voiceId
   if (typeof b.voiceId !== 'string' || b.voiceId.trim().length === 0) {
     errors.push('voiceId is required');
   }
 
+  // clickSound
   if (!VALID_CLICK_SOUNDS.includes(b.clickSound as typeof VALID_CLICK_SOUNDS[number])) {
     errors.push(`clickSound must be one of: ${VALID_CLICK_SOUNDS.join(', ')}`);
   }
 
+  // format
   if (!VALID_FORMATS.includes(b.format as typeof VALID_FORMATS[number])) {
     errors.push(`format must be one of: ${VALID_FORMATS.join(', ')}`);
   }
 
+  // booleans
   if (typeof b.enableCountIn !== 'boolean') {
     errors.push('enableCountIn must be a boolean');
   }
@@ -91,6 +103,7 @@ function validateSpec(body: unknown): { spec: SongSpec; errors: string[] } {
     errors.push('enableBarCountdown must be a boolean');
   }
 
+  // countInBars
   if (typeof b.countInBars !== 'number' || ![0, 1, 2].includes(b.countInBars)) {
     errors.push('countInBars must be 0, 1, or 2');
   }
@@ -98,11 +111,19 @@ function validateSpec(body: unknown): { spec: SongSpec; errors: string[] } {
   return { spec: body as SongSpec, errors };
 }
 
+// ---------------------------------------------------------------------------
+// Storage directory (local filesystem -- will migrate to GCS)
+// ---------------------------------------------------------------------------
+
 const TRACKS_DIR = path.join(process.cwd(), '.data', 'tracks');
 
 async function ensureTracksDir(): Promise<void> {
   await fs.mkdir(TRACKS_DIR, { recursive: true });
 }
+
+// ---------------------------------------------------------------------------
+// POST /api/tracks/generate
+// ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -115,6 +136,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // --- Validate --------------------------------------------------------
   const { spec, errors } = validateSpec(body);
   if (errors.length > 0) {
     return NextResponse.json<ApiError>(
@@ -126,9 +148,12 @@ export async function POST(request: NextRequest) {
   const trackId = crypto.randomUUID();
 
   try {
+    // --- Render audio ---------------------------------------------------
+    // Dynamic import so we only load the heavy audio engine on this route
     const { renderTrack } = await import('@/lib/audio/engine');
     const result = await renderTrack(spec);
 
+    // --- Persist to local filesystem ------------------------------------
     await ensureTracksDir();
     const ext = spec.format;
     const fullPath = path.join(TRACKS_DIR, `${trackId}.${ext}`);
@@ -142,6 +167,7 @@ export async function POST(request: NextRequest) {
     const previewUrl = `/api/tracks/${trackId}/download?preview=true`;
     const fullUrl = `/api/tracks/${trackId}/download`;
 
+    // --- Save to database (or fall back to in-memory) -------------------
     let savedRecord: {
       id: string;
       previewUrl: string;

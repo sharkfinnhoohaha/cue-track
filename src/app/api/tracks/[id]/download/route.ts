@@ -4,7 +4,15 @@ import fs from 'fs/promises';
 import { eq, and } from 'drizzle-orm';
 import type { ApiError } from '@/types';
 
+// ---------------------------------------------------------------------------
+// Local storage path (mirrors generate route -- will migrate to GCS)
+// ---------------------------------------------------------------------------
+
 const TRACKS_DIR = path.join(process.cwd(), '.data', 'tracks');
+
+// ---------------------------------------------------------------------------
+// GET /api/tracks/[id]/download?preview=true
+// ---------------------------------------------------------------------------
 
 export async function GET(
   request: NextRequest,
@@ -29,6 +37,7 @@ export async function GET(
     );
   }
 
+  // --- Payment gate (skip for previews) --------------------------------
   if (!isPreview) {
     const authResult = await checkPaymentAccess(id);
     if (!authResult.allowed) {
@@ -46,6 +55,7 @@ export async function GET(
     }
   }
 
+  // --- Determine file format from DB or fall back to wav ----------------
   let ext = 'wav';
   if (process.env.DATABASE_URL) {
     try {
@@ -55,17 +65,20 @@ export async function GET(
         ext = rows[0].spec.format;
       }
     } catch {
-      // Fall through
+      // Fall through -- use default ext
     }
   }
 
+  // --- Resolve file path ------------------------------------------------
   const suffix = isPreview ? `_preview.${ext}` : `.${ext}`;
   const filePath = path.join(TRACKS_DIR, `${id}${suffix}`);
 
+  // Try both extensions if the default is not found
   let resolvedPath = filePath;
   try {
     await fs.access(resolvedPath);
   } catch {
+    // Try the other format
     const altExt = ext === 'wav' ? 'mp3' : 'wav';
     const altSuffix = isPreview ? `_preview.${altExt}` : `.${altExt}`;
     const altPath = path.join(TRACKS_DIR, `${id}${altSuffix}`);
@@ -81,6 +94,7 @@ export async function GET(
     }
   }
 
+  // --- Stream the file --------------------------------------------------
   const fileBuffer = await fs.readFile(resolvedPath);
   const contentType = ext === 'mp3' ? 'audio/mpeg' : 'audio/wav';
   const disposition = isPreview ? 'inline' : 'attachment';
@@ -98,6 +112,10 @@ export async function GET(
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Payment / subscription check
+// ---------------------------------------------------------------------------
 
 interface AccessResult {
   allowed: boolean;
