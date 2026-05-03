@@ -136,7 +136,6 @@ export default function DashboardPage() {
                 >
                   <div className="card p-4 sm:p-5 transition-all hover:border-accent/30 hover:bg-surface-raised/80">
                     <div className="flex items-center gap-4">
-                      {/* Play icon */}
                       <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-surface-border group-hover:bg-accent/15 transition-colors">
                         <svg
                           className="h-4 w-4 text-muted group-hover:text-accent transition-colors ml-0.5"
@@ -147,7 +146,6 @@ export default function DashboardPage() {
                         </svg>
                       </div>
 
-                      {/* Track info */}
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm font-medium text-[#F0EDE6] truncate group-hover:text-accent transition-colors">
                           {track.title}
@@ -164,7 +162,6 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {/* Status & date */}
                       <div className="hidden sm:flex flex-col items-end gap-1.5 flex-shrink-0">
                         <span
                           className={cn(
@@ -183,7 +180,6 @@ export default function DashboardPage() {
                         </span>
                       </div>
 
-                      {/* Arrow */}
                       <svg
                         className="h-4 w-4 text-muted group-hover:text-accent transition-colors flex-shrink-0"
                         viewBox="0 0 20 20"

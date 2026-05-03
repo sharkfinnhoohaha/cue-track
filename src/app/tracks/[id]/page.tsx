@@ -9,8 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
 
-// ---------- Waveform Visualization ----------
-
 function WaveformCanvas({
   audioUrl,
   currentTime,
@@ -25,7 +23,6 @@ function WaveformCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const waveDataRef = useRef<Float32Array | null>(null);
 
-  // Decode audio and extract waveform data
   useEffect(() => {
     if (!audioUrl) return;
     let cancelled = false;
@@ -38,7 +35,6 @@ function WaveformCanvas({
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         const channelData = audioBuffer.getChannelData(0);
 
-        // Downsample to ~200 bars
         const barCount = 200;
         const samplesPerBar = Math.floor(channelData.length / barCount);
         const peaks = new Float32Array(barCount);
@@ -59,7 +55,6 @@ function WaveformCanvas({
         }
         audioContext.close();
       } catch {
-        // Fallback: generate placeholder waveform
         if (!cancelled) {
           const placeholder = new Float32Array(200);
           for (let i = 0; i < 200; i++) {
@@ -71,12 +66,9 @@ function WaveformCanvas({
     };
 
     loadWaveform();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [audioUrl]);
 
-  // Draw waveform
   useEffect(() => {
     const canvas = canvasRef.current;
     const peaks = waveDataRef.current;
@@ -133,8 +125,6 @@ function WaveformCanvas({
   );
 }
 
-// ---------- Audio Player ----------
-
 function AudioPlayer({ src }: { src: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -188,7 +178,6 @@ function AudioPlayer({ src }: { src: string }) {
     <div className="space-y-3">
       <audio ref={audioRef} src={src} preload="metadata" />
 
-      {/* Waveform */}
       <WaveformCanvas
         audioUrl={src}
         currentTime={currentTime}
@@ -196,7 +185,6 @@ function AudioPlayer({ src }: { src: string }) {
         onSeek={seek}
       />
 
-      {/* Controls */}
       <div className="flex items-center gap-4">
         <button
           type="button"
@@ -215,14 +203,12 @@ function AudioPlayer({ src }: { src: string }) {
           )}
         </button>
 
-        {/* Time display */}
         <div className="flex items-center gap-2 font-mono text-xs text-muted">
           <span>{formatTime(currentTime)}</span>
           <span>/</span>
           <span>{formatTime(duration)}</span>
         </div>
 
-        {/* Progress bar */}
         <div className="flex-1">
           <div className="progress-bar">
             <div
@@ -235,8 +221,6 @@ function AudioPlayer({ src }: { src: string }) {
     </div>
   );
 }
-
-// ---------- Track Detail Page ----------
 
 export default function TrackDetailPage() {
   const params = useParams();
@@ -356,7 +340,6 @@ export default function TrackDetailPage() {
     <>
       <Nav />
       <main className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
-        {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <span
@@ -379,14 +362,12 @@ export default function TrackDetailPage() {
           <p className="mt-2 text-sm text-muted">Created {createdDate}</p>
         </div>
 
-        {/* Audio Player */}
         {track.previewUrl && track.status === 'ready' && (
           <Card className="mb-8">
             <AudioPlayer src={track.previewUrl} />
           </Card>
         )}
 
-        {/* Rendering state */}
         {isRendering && (
           <Card className="mb-8">
             <div className="flex flex-col items-center py-8 text-center">
@@ -397,46 +378,17 @@ export default function TrackDetailPage() {
           </Card>
         )}
 
-        {/* Track Info Grid */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
-          <Card>
-            <div className="text-center">
-              <p className="font-mono text-xs uppercase text-muted tracking-wider">BPM</p>
-              <p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">{track.spec.bpm}</p>
-            </div>
-          </Card>
-          <Card>
-            <div className="text-center">
-              <p className="font-mono text-xs uppercase text-muted tracking-wider">Time Sig</p>
-              <p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">{tsLabel}</p>
-            </div>
-          </Card>
-          <Card>
-            <div className="text-center">
-              <p className="font-mono text-xs uppercase text-muted tracking-wider">Sections</p>
-              <p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">{track.spec.sections.length}</p>
-            </div>
-          </Card>
-          <Card>
-            <div className="text-center">
-              <p className="font-mono text-xs uppercase text-muted tracking-wider">Duration</p>
-              <p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">
-                {track.duration
-                  ? `${Math.floor(track.duration / 60)}:${String(Math.floor(track.duration % 60)).padStart(2, '0')}`
-                  : '--:--'}
-              </p>
-            </div>
-          </Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">BPM</p><p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">{track.spec.bpm}</p></div></Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Time Sig</p><p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">{tsLabel}</p></div></Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Sections</p><p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">{track.spec.sections.length}</p></div></Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Duration</p><p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">{track.duration ? `${Math.floor(track.duration / 60)}:${String(Math.floor(track.duration % 60)).padStart(2, '0')}` : '--:--'}</p></div></Card>
         </div>
 
-        {/* Section Breakdown */}
         <Card header="Section Breakdown" className="mb-8">
           <div className="space-y-2">
             {track.spec.sections.map((section, i) => (
-              <div
-                key={section.id || i}
-                className="flex items-center justify-between rounded-lg bg-surface px-4 py-2.5 border border-surface-border"
-              >
+              <div key={section.id || i} className="flex items-center justify-between rounded-lg bg-surface px-4 py-2.5 border border-surface-border">
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-xs text-muted w-6 text-center">{i + 1}</span>
                   <span className="text-sm font-medium text-[#F0EDE6]">{section.name}</span>
@@ -445,52 +397,25 @@ export default function TrackDetailPage() {
               </div>
             ))}
             <div className="flex justify-end pt-2 border-t border-surface-border mt-3">
-              <span className="font-mono text-xs text-muted">
-                Total: {totalBars} bars
-              </span>
+              <span className="font-mono text-xs text-muted">Total: {totalBars} bars</span>
             </div>
           </div>
         </Card>
 
-        {/* Options summary */}
         <Card header="Track Options" className="mb-8">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <div>
-              <p className="font-mono text-xs uppercase text-muted tracking-wider">Click Sound</p>
-              <p className="text-sm text-[#F0EDE6] mt-0.5 capitalize">{track.spec.clickSound}</p>
-            </div>
-            <div>
-              <p className="font-mono text-xs uppercase text-muted tracking-wider">Count-in</p>
-              <p className="text-sm text-[#F0EDE6] mt-0.5">
-                {track.spec.enableCountIn ? `${track.spec.countInBars} bar${track.spec.countInBars > 1 ? 's' : ''}` : 'Off'}
-              </p>
-            </div>
-            <div>
-              <p className="font-mono text-xs uppercase text-muted tracking-wider">Section Cues</p>
-              <p className="text-sm text-[#F0EDE6] mt-0.5">{track.spec.enableSectionAnnounce ? 'On' : 'Off'}</p>
-            </div>
-            <div>
-              <p className="font-mono text-xs uppercase text-muted tracking-wider">Bar Countdown</p>
-              <p className="text-sm text-[#F0EDE6] mt-0.5">{track.spec.enableBarCountdown ? 'On' : 'Off'}</p>
-            </div>
-            <div>
-              <p className="font-mono text-xs uppercase text-muted tracking-wider">Format</p>
-              <p className="text-sm text-[#F0EDE6] mt-0.5 font-mono uppercase">{track.spec.format}</p>
-            </div>
+            <div><p className="font-mono text-xs uppercase text-muted tracking-wider">Click Sound</p><p className="text-sm text-[#F0EDE6] mt-0.5 capitalize">{track.spec.clickSound}</p></div>
+            <div><p className="font-mono text-xs uppercase text-muted tracking-wider">Count-in</p><p className="text-sm text-[#F0EDE6] mt-0.5">{track.spec.enableCountIn ? `${track.spec.countInBars} bar${track.spec.countInBars > 1 ? 's' : ''}` : 'Off'}</p></div>
+            <div><p className="font-mono text-xs uppercase text-muted tracking-wider">Section Cues</p><p className="text-sm text-[#F0EDE6] mt-0.5">{track.spec.enableSectionAnnounce ? 'On' : 'Off'}</p></div>
+            <div><p className="font-mono text-xs uppercase text-muted tracking-wider">Bar Countdown</p><p className="text-sm text-[#F0EDE6] mt-0.5">{track.spec.enableBarCountdown ? 'On' : 'Off'}</p></div>
+            <div><p className="font-mono text-xs uppercase text-muted tracking-wider">Format</p><p className="text-sm text-[#F0EDE6] mt-0.5 font-mono uppercase">{track.spec.format}</p></div>
           </div>
         </Card>
 
-        {/* Download / Purchase CTA */}
         {track.status === 'ready' && (
           <div className="flex flex-col items-center gap-3 pt-4">
             {isPaid ? (
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={handleDownload}
-                loading={downloading}
-                className="min-w-[240px] glow-accent"
-              >
+              <Button variant="primary" size="lg" onClick={handleDownload} loading={downloading} className="min-w-[240px] glow-accent">
                 <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                   <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
                   <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
@@ -498,20 +423,12 @@ export default function TrackDetailPage() {
                 Download Full Track
               </Button>
             ) : (
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={handleCheckout}
-                loading={downloading}
-                className="min-w-[240px] glow-accent"
-              >
+              <Button variant="primary" size="lg" onClick={handleCheckout} loading={downloading} className="min-w-[240px] glow-accent">
                 Download Full Track &mdash; $3
               </Button>
             )}
             <p className="text-xs text-muted">
-              {isPaid
-                ? `${track.spec.format.toUpperCase()} file, studio quality`
-                : 'One-time payment. No subscription required.'}
+              {isPaid ? `${track.spec.format.toUpperCase()} file, studio quality` : 'One-time payment. No subscription required.'}
             </p>
           </div>
         )}

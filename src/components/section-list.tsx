@@ -56,7 +56,6 @@ export function SectionList({ sections, onChange }: SectionListProps) {
       dragNodeRef.current = e.currentTarget;
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', String(index));
-      // Make the dragged element semi-transparent after a tick
       requestAnimationFrame(() => {
         if (dragNodeRef.current) {
           dragNodeRef.current.style.opacity = '0.4';

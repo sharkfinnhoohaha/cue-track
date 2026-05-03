@@ -10,8 +10,6 @@ import { Card } from '@/components/ui/card';
 import { SectionList } from '@/components/section-list';
 import { cn } from '@/lib/cn';
 
-// ---------- Constants ----------
-
 const TIME_SIGNATURES: { value: string; label: string; ts: TimeSignature }[] = [
   { value: '4/4', label: '4/4', ts: { beats: 4, subdivision: 4 } },
   { value: '3/4', label: '3/4', ts: { beats: 3, subdivision: 4 } },
@@ -40,21 +38,17 @@ const FORMAT_OPTIONS: { id: SongSpec['format']; label: string }[] = [
   { id: 'mp3', label: 'MP3' },
 ];
 
-// ---------- Tap Tempo ----------
-
 function useTapTempo(onBpmChange: (bpm: number) => void) {
   const tapsRef = useRef<number[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const tap = useCallback(() => {
     const now = Date.now();
-    // Reset if more than 2 seconds since last tap
     if (tapsRef.current.length > 0 && now - tapsRef.current[tapsRef.current.length - 1] > 2000) {
       tapsRef.current = [];
     }
     tapsRef.current.push(now);
 
-    // Need at least 2 taps to compute BPM
     if (tapsRef.current.length >= 2) {
       const intervals: number[] = [];
       for (let i = 1; i < tapsRef.current.length; i++) {
@@ -67,7 +61,6 @@ function useTapTempo(onBpmChange: (bpm: number) => void) {
       }
     }
 
-    // Auto-reset after 3 seconds of inactivity
     clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       tapsRef.current = [];
@@ -76,8 +69,6 @@ function useTapTempo(onBpmChange: (bpm: number) => void) {
 
   return tap;
 }
-
-// ---------- Component ----------
 
 const DEFAULT_SPEC: SongSpec = {
   title: '',
@@ -123,7 +114,6 @@ export function TrackForm() {
     e.preventDefault();
     setError(null);
 
-    // Validation
     if (!spec.title.trim()) {
       setError('Please enter a track title.');
       return;
@@ -331,7 +321,6 @@ export function TrackForm() {
       {/* Options */}
       <Card header="Options">
         <div className="space-y-4">
-          {/* Count-in toggle */}
           <ToggleRow
             label="Count-in"
             description="Audible count before the first section starts"
@@ -363,7 +352,6 @@ export function TrackForm() {
             </div>
           )}
 
-          {/* Section announcements */}
           <ToggleRow
             label="Section Announcements"
             description="Voice announces each section name before it starts"
@@ -371,7 +359,6 @@ export function TrackForm() {
             onChange={(v) => update('enableSectionAnnounce', v)}
           />
 
-          {/* Bar countdown */}
           <ToggleRow
             label="Bar Countdown"
             description="Countdown numbers before each new section"
@@ -403,8 +390,6 @@ export function TrackForm() {
     </form>
   );
 }
-
-// ---------- Toggle Sub-Component ----------
 
 function ToggleRow({
   label,
