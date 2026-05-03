@@ -1,0 +1,153 @@
+import { NextRequest, NextResponse } from 'next/server';
+import path from 'path';
+import fs from 'fs/promises';
+import { eq, and } from 'drizzle-orm';
+import type { ApiError } from '@/types';
+
+const TRACKS_DIR = path.join(process.cwd(), '.data', 'tracks');
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } },
+) {
+  const { id } = params;
+  const { searchParams } = new URL(request.url);
+  const isPreview = searchParams.get('preview') === 'true';
+
+  if (!id || typeof id !== 'string') {
+    return NextResponse.json<ApiError>(
+      { error: 'Track ID is required' },
+      { status: 400 },
+    );
+  }
+
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRe.test(id)) {
+    return NextResponse.json<ApiError>(
+      { error: 'Invalid track ID format' },
+      { status: 400 },
+    );
+  }
+
+  if (!isPreview) {
+    const authResult = await checkPaymentAccess(id);
+    if (!authResult.allowed) {
+      return NextResponse.json<ApiError>(
+        {
+          error: 'Payment required',
+          code: 'PAYMENT_REQUIRED',
+          details: {
+            checkoutUrl: `/api/stripe/checkout`,
+            trackId: id,
+          },
+        },
+        { status: 402 },
+      );
+    }
+  }
+
+  let ext = 'wav';
+  if (process.env.DATABASE_URL) {
+    try {
+      const { db, tracks } = await import('@/lib/db');
+      const rows = await db.select({ spec: tracks.spec }).from(tracks).where(eq(tracks.id, id)).limit(1);
+      if (rows.length > 0 && rows[0].spec?.format) {
+        ext = rows[0].spec.format;
+      }
+    } catch {
+      // Fall through
+    }
+  }
+
+  const suffix = isPreview ? `_preview.${ext}` : `.${ext}`;
+  const filePath = path.join(TRACKS_DIR, `${id}${suffix}`);
+
+  let resolvedPath = filePath;
+  try {
+    await fs.access(resolvedPath);
+  } catch {
+    const altExt = ext === 'wav' ? 'mp3' : 'wav';
+    const altSuffix = isPreview ? `_preview.${altExt}` : `.${altExt}`;
+    const altPath = path.join(TRACKS_DIR, `${id}${altSuffix}`);
+    try {
+      await fs.access(altPath);
+      resolvedPath = altPath;
+      ext = altExt;
+    } catch {
+      return NextResponse.json<ApiError>(
+        { error: 'Track file not found' },
+        { status: 404 },
+      );
+    }
+  }
+
+  const fileBuffer = await fs.readFile(resolvedPath);
+  const contentType = ext === 'mp3' ? 'audio/mpeg' : 'audio/wav';
+  const disposition = isPreview ? 'inline' : 'attachment';
+  const filename = isPreview
+    ? `preview_${id}.${ext}`
+    : `cuetrack_${id}.${ext}`;
+
+  return new NextResponse(fileBuffer, {
+    status: 200,
+    headers: {
+      'Content-Type': contentType,
+      'Content-Disposition': `${disposition}; filename="${filename}"`,
+      'Content-Length': String(fileBuffer.length),
+      'Cache-Control': 'private, max-age=3600',
+    },
+  });
+}
+
+interface AccessResult {
+  allowed: boolean;
+}
+
+async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
+  if (!process.env.DATABASE_URL) {
+    console.info('[download] DATABASE_URL not set -- allowing download in demo mode');
+    return { allowed: true };
+  }
+
+  try {
+    const { db, purchases, users, tracks } = await import('@/lib/db');
+
+    const paidPurchase = await db
+      .select({ id: purchases.id })
+      .from(purchases)
+      .where(
+        and(
+          eq(purchases.trackId, trackId),
+          eq(purchases.status, 'paid'),
+        ),
+      )
+      .limit(1);
+
+    if (paidPurchase.length > 0) {
+      return { allowed: true };
+    }
+
+    const trackRows = await db
+      .select({ userId: tracks.userId })
+      .from(tracks)
+      .where(eq(tracks.id, trackId))
+      .limit(1);
+
+    if (trackRows.length > 0 && trackRows[0].userId) {
+      const userRows = await db
+        .select({ subscriptionStatus: users.subscriptionStatus })
+        .from(users)
+        .where(eq(users.id, trackRows[0].userId))
+        .limit(1);
+
+      if (userRows.length > 0 && userRows[0].subscriptionStatus === 'active') {
+        return { allowed: true };
+      }
+    }
+
+    return { allowed: false };
+  } catch (dbError) {
+    console.error('[download] Payment check failed:', dbError);
+    return { allowed: true };
+  }
+}
