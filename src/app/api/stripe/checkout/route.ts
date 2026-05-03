@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { ApiError, PlanId } from '@/types';
 
+// ---------------------------------------------------------------------------
+// Pricing configuration
+// ---------------------------------------------------------------------------
+
 const PRICES: Record<PlanId, { amountCents: number; mode: 'payment' | 'subscription'; label: string }> = {
   single: { amountCents: 300, mode: 'payment', label: 'Single Track Download' },
   pro: { amountCents: 1900, mode: 'subscription', label: 'Cue Track Pro (Monthly)' },
 };
+
+// ---------------------------------------------------------------------------
+// POST /api/stripe/checkout
+// ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest) {
   let body: unknown;
@@ -30,6 +38,8 @@ export async function POST(request: NextRequest) {
     plan?: string;
   };
 
+  // --- Validate inputs --------------------------------------------------
+
   if (!plan || !['single', 'pro'].includes(plan)) {
     return NextResponse.json<ApiError>(
       { error: 'plan is required and must be "single" or "pro"' },
@@ -51,6 +61,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // --- Stripe not configured -> demo mode --------------------------------
+
   if (!process.env.STRIPE_SECRET_KEY) {
     console.warn('[stripe/checkout] STRIPE_SECRET_KEY not set -- returning demo URL');
     return NextResponse.json({
@@ -58,6 +70,8 @@ export async function POST(request: NextRequest) {
       demo: true,
     });
   }
+
+  // --- Create Stripe Checkout Session -----------------------------------
 
   try {
     const Stripe = (await import('stripe')).default;
@@ -76,6 +90,8 @@ export async function POST(request: NextRequest) {
       ? `${origin}/tracks/${trackId}?checkout=canceled`
       : `${origin}/pricing?checkout=canceled`;
 
+    // Build line_items depending on whether we have a Stripe Price ID
+    // configured in env, or fall back to ad-hoc price_data.
     const priceId = plan === 'pro'
       ? process.env.STRIPE_PRO_PRICE_ID
       : process.env.STRIPE_SINGLE_PRICE_ID;
