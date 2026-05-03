@@ -123,6 +123,7 @@ interface AccessResult {
 
 async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
   if (!process.env.DATABASE_URL) {
+    // Demo mode: allow all downloads when DB is not configured
     console.info('[download] DATABASE_URL not set -- allowing download in demo mode');
     return { allowed: true };
   }
@@ -130,6 +131,7 @@ async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
   try {
     const { db, purchases, users, tracks } = await import('@/lib/db');
 
+    // Check 1: Does a paid purchase exist for this track?
     const paidPurchase = await db
       .select({ id: purchases.id })
       .from(purchases)
@@ -145,6 +147,7 @@ async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
       return { allowed: true };
     }
 
+    // Check 2: Is the track owner a Pro subscriber?
     const trackRows = await db
       .select({ userId: tracks.userId })
       .from(tracks)
@@ -166,6 +169,8 @@ async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
     return { allowed: false };
   } catch (dbError) {
     console.error('[download] Payment check failed:', dbError);
+    // Fail open in case of DB errors -- log for investigation
+    // In production you may prefer fail-closed
     return { allowed: true };
   }
 }
