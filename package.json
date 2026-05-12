@@ -11,7 +11,7 @@
     "test:e2e": "npx playwright test"
   },
   "dependencies": {
-    "next": "14.2.29",
+    "next": "14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "@google-cloud/text-to-speech": "^5.5.0",
@@ -20,6 +20,7 @@
     "@auth/core": "^0.37.4",
     "@auth/drizzle-adapter": "^1.7.4",
     "next-auth": "^5.0.0-beta.25",
+    "nodemailer": "^6.9.16",
     "stripe": "^17.5.0",
     "resend": "^4.1.2",
     "lamejs": "^1.2.1",
@@ -33,6 +34,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/nodemailer": "^6.4.17",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "typescript": "^5.7.2",
