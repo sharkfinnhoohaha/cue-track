@@ -19,8 +19,14 @@
 
 import NextAuth, { type NextAuthConfig } from 'next-auth';
 import Nodemailer from 'next-auth/providers/nodemailer';
+import type { JWT } from 'next-auth/jwt';
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
 import type { SubscriptionStatus } from '@/types';
+
+// Reference JWT so TS keeps the module-augmentation site below valid under
+// moduleResolution=bundler. Without an import, the declare-module block
+// triggers TS2664 (module not found in augmentation).
+type _JwtBridge = JWT;
 
 declare module 'next-auth' {
   interface Session {
