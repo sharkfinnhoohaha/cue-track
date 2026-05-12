@@ -8,21 +8,32 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function Card({ header, elevated = false, className, children, ...props }: CardProps) {
   return (
-    <div className={cn(elevated ? 'card-elevated' : 'card', 'overflow-hidden', className)} {...props}>
+    <div
+      className={cn(
+        'bg-white border border-black/[.08] rounded-[14px]',
+        elevated && 'shadow-sm',
+        className,
+      )}
+      {...props}
+    >
       {header && (
-        <div className="border-b border-surface-border px-6 py-4">
+        <div className="px-4 py-3 border-b border-black/[.08]">
           {typeof header === 'string' ? (
-            <h3 className="font-mono text-sm font-medium uppercase tracking-wider text-[#C0BDB6]">{header}</h3>
-          ) : header}
+            <h4 className="font-semibold text-sm text-[#1d1d1f]">{header}</h4>
+          ) : (
+            header
+          )}
         </div>
       )}
-      <div className="px-6 py-5">{children}</div>
+      <div className="p-4">{children}</div>
     </div>
   );
 }
 
 export function CardGrid({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('grid gap-4 sm:grid-cols-2 lg:grid-cols-3', className)} {...props}>{children}</div>
+    <div className={cn('grid gap-4', className)} {...props}>
+      {children}
+    </div>
   );
 }

@@ -1,27 +1,19 @@
 import type { Metadata, Viewport } from 'next';
-import { Playfair_Display, JetBrains_Mono, Inter } from 'next/font/google';
+import { JetBrains_Mono, Inter } from 'next/font/google';
 import './globals.css';
 
-// ─── Font definitions ───────────────────────────────────────────────────────
-
-const playfair = Playfair_Display({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  style: ['normal', 'italic'],
-  variable: '--font-playfair',
-  display: 'swap',
-});
+// ─── Fonts ───────────────────────────────────────────────────────────────────
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
-  weight: ['400', '500', '700'],
+  weight: ['400', '500', '600'],
   variable: '--font-jetbrains',
   display: 'swap',
 });
 
 const inter = Inter({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700'],
+  weight: ['300', '400', '500', '600', '700', '800', '900'],
   variable: '--font-inter',
   display: 'swap',
 });
@@ -69,8 +61,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Cue Track — Click & Cue Tracks for Live Musicians',
-    description:
-      'Generate professional click tracks and cue tracks for live musicians.',
+    description: 'Generate professional click tracks and cue tracks for live musicians.',
     images: ['/og-image.png'],
   },
   robots: {
@@ -98,31 +89,16 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#0A0A0A',
-  colorScheme: 'dark',
+  themeColor: '#f5f5f7',
+  colorScheme: 'light',
 };
 
 // ─── Root Layout ─────────────────────────────────────────────────────────────
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={[
-        'dark',
-        playfair.variable,
-        jetbrainsMono.variable,
-        inter.variable,
-      ].join(' ')}
-      suppressHydrationWarning
-    >
-      <body className="font-body bg-surface text-[#F0EDE6] antialiased min-h-dvh">
-        {children}
-      </body>
+    <html lang="en" className={`${jetbrainsMono.variable} ${inter.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }
