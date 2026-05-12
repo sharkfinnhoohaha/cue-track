@@ -3,7 +3,7 @@
  * Re-exports relevant types from the main types file and adds audio-specific ones.
  */
 
-export type {
+import type {
   SongSpec,
   SongSection,
   TimeSignature,
@@ -13,6 +13,17 @@ export type {
   ClickConfig,
   RenderResult,
 } from '../../types';
+
+export type {
+  SongSpec,
+  SongSection,
+  TimeSignature,
+  BeatPosition,
+  CueEvent,
+  TimeGrid,
+  ClickConfig,
+  RenderResult,
+};
 
 export type ClickSoundType = 'classic' | 'woodblock' | 'rimshot' | 'hi-hat';
 
