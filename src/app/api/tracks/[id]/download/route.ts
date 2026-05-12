@@ -5,7 +5,7 @@ import { eq, and } from 'drizzle-orm';
 import type { ApiError } from '@/types';
 
 // ---------------------------------------------------------------------------
-// Local storage path (mirrors generate route -- will migrate to GCS)
+// Local storage path (mirrors generate route; will migrate to GCS in P2)
 // ---------------------------------------------------------------------------
 
 const TRACKS_DIR = path.join(process.cwd(), '.data', 'tracks');
@@ -65,7 +65,7 @@ export async function GET(
         ext = rows[0].spec.format;
       }
     } catch {
-      // Fall through -- use default ext
+      // Fall through; use default ext.
     }
   }
 
@@ -102,7 +102,17 @@ export async function GET(
     ? `preview_${id}.${ext}`
     : `cuetrack_${id}.${ext}`;
 
-  return new NextResponse(fileBuffer, {
+  // Wrap in a plain Uint8Array view so the body satisfies BodyInit under
+  // @types/node@22, which made Buffer generic (Buffer<ArrayBufferLike>)
+  // and broke direct assignment to BodyInit. The view is a non-copy
+  // reference into the same memory.
+  const body = new Uint8Array(
+    fileBuffer.buffer,
+    fileBuffer.byteOffset,
+    fileBuffer.byteLength,
+  );
+
+  return new NextResponse(body, {
     status: 200,
     headers: {
       'Content-Type': contentType,
@@ -124,7 +134,7 @@ interface AccessResult {
 async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
   if (!process.env.DATABASE_URL) {
     // Demo mode: allow all downloads when DB is not configured
-    console.info('[download] DATABASE_URL not set -- allowing download in demo mode');
+    console.info('[download] DATABASE_URL not set; allowing download in demo mode');
     return { allowed: true };
   }
 
@@ -169,8 +179,8 @@ async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
     return { allowed: false };
   } catch (dbError) {
     console.error('[download] Payment check failed:', dbError);
-    // Fail open in case of DB errors -- log for investigation
-    // In production you may prefer fail-closed
+    // Fail open on DB errors; log for investigation.
+    // In production you may prefer fail-closed.
     return { allowed: true };
   }
 }

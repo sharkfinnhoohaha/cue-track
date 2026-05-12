@@ -113,7 +113,17 @@ export async function GET() {
       cachedPreview = renderDemoPreview();
     }
 
-    return new NextResponse(cachedPreview, {
+    // Wrap in a plain Uint8Array view so the body satisfies BodyInit under
+    // @types/node@22, which made Buffer generic (Buffer<ArrayBufferLike>)
+    // and broke direct assignment to BodyInit. The view is a non-copy
+    // reference into the same memory.
+    const body = new Uint8Array(
+      cachedPreview.buffer,
+      cachedPreview.byteOffset,
+      cachedPreview.byteLength,
+    );
+
+    return new NextResponse(body, {
       status: 200,
       headers: {
         'Content-Type': 'audio/wav',
