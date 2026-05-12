@@ -102,12 +102,13 @@ export async function GET(
     ? `preview_${id}.${ext}`
     : `cuetrack_${id}.${ext}`;
 
-  // Wrap in a plain Uint8Array view so the body satisfies BodyInit under
-  // @types/node@22, which made Buffer generic (Buffer<ArrayBufferLike>)
-  // and broke direct assignment to BodyInit. The view is a non-copy
-  // reference into the same memory.
+  // Cast buf.buffer to ArrayBuffer so the Uint8Array generic resolves to
+  // Uint8Array<ArrayBuffer> (not Uint8Array<ArrayBufferLike>), which is
+  // what BufferSource/BodyInit expects under TS 5.7 + @types/node 22.
+  // Node Buffer is always ArrayBuffer-backed at runtime (never
+  // SharedArrayBuffer), so the cast is safe. View, no copy.
   const body = new Uint8Array(
-    fileBuffer.buffer,
+    fileBuffer.buffer as ArrayBuffer,
     fileBuffer.byteOffset,
     fileBuffer.byteLength,
   );
