@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const Stripe = (await import('stripe')).default;
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' });
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2025-02-24.acacia' });
     const origin = request.headers.get('origin') || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     const portalSession = await stripe.billingPortal.sessions.create({ customer: customerId, return_url: `${origin}/account` });
     return NextResponse.json({ url: portalSession.url });
