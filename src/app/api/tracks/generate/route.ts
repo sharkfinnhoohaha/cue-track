@@ -15,6 +15,16 @@ const VALID_CLICK_SOUNDS = ['classic', 'woodblock', 'rimshot', 'hi-hat'] as cons
 const VALID_FORMATS = ['wav', 'mp3'] as const;
 const VALID_COUNT_IN_BARS = [0, 1, 2, 3, 4] as const;
 
+/**
+ * Validate an arbitrary value as a SongSpec and collect any validation errors.
+ *
+ * Validates required song-spec fields (title, bpm, timeSignature, sections, voiceId,
+ * clickSound, format, boolean flags, and countInBars) and returns the original value
+ * cast to `SongSpec` together with any validation messages.
+ *
+ * @param body - The parsed JSON request body to validate
+ * @returns An object with `spec` set to the input cast as `SongSpec` (only meaningful when `errors` is empty) and `errors` containing any validation error messages
+ */
 function validateSpec(body: unknown): { spec: SongSpec; errors: string[] } {
   const errors: string[] = [];
 
@@ -137,7 +147,12 @@ function validateSpec(body: unknown): { spec: SongSpec; errors: string[] } {
 // Duration is computed from the time grid alone, which is cheap. Audio is
 // NOT rendered at generate time, so this route is now O(grid) regardless of
 // song length, and "Track rendering failed" can only mean a DB write failed.
-//
+/**
+ * Handle POST requests to create a new track entry from a SongSpec payload, compute its duration from the time grid, persist the spec to the database, and return the saved track metadata.
+ *
+ * @param request - Next.js request whose JSON body must be a valid `SongSpec`
+ * @returns JSON response with either the saved track metadata (`id`, `previewUrl`, `status`, `duration`) or an error object containing `error` and optional `details`
+ */
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {

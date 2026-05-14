@@ -21,11 +21,30 @@ const SAMPLE_RATE = 44100;
 let passed = 0;
 let failed = 0;
 
+/**
+ * Record the result of a test assertion and log the outcome.
+ *
+ * Logs a success message and increments the global `passed` counter when `condition` is true;
+ * otherwise logs a failure message and increments the global `failed` counter.
+ *
+ * @param condition - The assertion to evaluate; treated as passing when truthy
+ * @param message - Human-readable description of the assertion used in the log output
+ */
 function assert(condition: boolean, message: string): void {
   if (condition) { console.log(`  ✓ ${message}`); passed++; }
   else { console.error(`  ✗ FAIL: ${message}`); failed++; }
 }
 
+/**
+ * Create a baseline SongSpec for tests and merge any provided overrides into it.
+ *
+ * Defaults include: title "Test", 120 BPM, 4/4 time, three sections (Intro 4 bars, Verse 8 bars, Chorus 8 bars),
+ * voiceId "en-US-Studio-M", classic click sound, WAV format, count-in and section announce enabled,
+ * bar countdown disabled, and `countInBars` set to 1.
+ *
+ * @param overrides - Partial fields to apply over the default SongSpec
+ * @returns The resulting SongSpec with defaults merged with `overrides`
+ */
 function makeSpec(overrides: Partial<SongSpec> = {}): SongSpec {
   return {
     title: 'Test',

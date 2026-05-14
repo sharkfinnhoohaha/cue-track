@@ -25,7 +25,14 @@ export const runtime = 'nodejs';
 // Render cost for a typical 4-minute track is 3-8s on Vercel Pro, well inside
 // the 60s function limit. Hobby tier (10s) will be tight for longer tracks;
 // the audit recommends staying on Pro.
-//
+/**
+ * Serves a rendered audio track (preview or full) by validating the request, enforcing access rules, loading the persisted SongSpec, rendering audio on demand, and streaming the resulting bytes with appropriate headers.
+ *
+ * @param request - The incoming NextRequest; the `preview` query parameter is read from its URL.
+ * @param params - Object containing route parameters.
+ * @param params.id - UUID of the track to load and render.
+ * @returns An HTTP response with the rendered audio bytes and headers (200 on success). Error responses use appropriate status codes and JSON bodies (400, 402, 404, 410, 500) depending on validation, access, loading, or rendering failures.
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } },
@@ -153,7 +160,12 @@ export async function GET(
 
 // ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
+/**
+ * Produces a filesystem- and HTTP-safe filename component from a title.
+ *
+ * @param name - Original title to sanitize; when falsy an empty string is returned.
+ * @returns A sanitized filename segment containing only letters, digits, underscores, and hyphens, trimmed of leading/trailing underscores and truncated to 80 characters.
+ */
 
 function sanitizeFilename(name: string | null | undefined): string {
   if (!name) return '';
@@ -167,6 +179,12 @@ interface AccessResult {
   allowed: boolean;
 }
 
+/**
+ * Determines whether a non-preview download is allowed for a given track.
+ *
+ * @param trackId - The track's UUID to check access for
+ * @returns `{ allowed: true }` if a paid purchase exists for the track or the track's owner has an active subscription, `{ allowed: false }` otherwise; returns `{ allowed: false }` on database errors.
+ */
 async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
   // DATABASE_URL is required at the top of GET; if we got here, it is set.
   try {

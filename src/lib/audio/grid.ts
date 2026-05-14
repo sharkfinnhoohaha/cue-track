@@ -6,34 +6,19 @@
 import type { SongSpec, TimeGrid, BeatPosition, CueEvent } from './types';
 
 /**
- * Build a complete time grid from a song specification.
- * Walks through every section, bar, and beat, computing exact sample positions.
- * Generates cue events for section announcements, count-ins, bar countdowns,
- * and the new section_count_in pattern that combines section name + count.
+ * Constructs a sample-accurate TimeGrid for the provided song specification.
  *
- * Cue behavior depends on the combination of enableSectionAnnounce and
- * enableCountIn:
+ * Generates per-beat positions and timed cue events (section announcements, count-ins,
+ * bar countdowns, and `section_count_in` patterns), plus section boundaries and overall duration.
  *
- *   announce  countIn  countInBars  intro pre-roll        mid-song transitions
- *   -------   -------  -----------  --------------------  --------------------
- *   false     *        *            no announcement       no announcement
- *   true      false    *            announce at sample 0  section_announce one bar before
- *   true      true     0            announce at sample 0  section_count_in pattern
- *   true      true     1            section_count_in      section_count_in pattern
- *                                     ("Intro", 2, 3, 4) on the single count-in bar
- *   true      true     >=2          section_announce on   section_count_in pattern
- *                                     beat 1 of bar 1,
- *                                     digit count-in on
- *                                     the LAST count-in
- *                                     bar, silence between
- *
- * The section_count_in pattern is emitted as atomic cues (one per beat) so the
- * engine and mixer can handle each utterance independently. See CueEvent in
- * src/types/index.ts for the full rationale.
- *
- * @param spec - The song specification
- * @param sampleRate - Audio sample rate (typically 44100)
- * @returns TimeGrid with beats, cues, section boundaries, and total duration info
+ * @param spec - Song specification (sections, tempo, time signatures, and cue/count-in settings)
+ * @param sampleRate - Audio sample rate in Hz used to convert beats/bars to sample indices
+ * @returns A TimeGrid containing:
+ *  - `beats`: an array of per-beat `BeatPosition` entries with sample indices, beat/bar numbers, downbeat flags, and section info
+ *  - `cues`: time-ordered `CueEvent` entries for section announces, count-ins, bar countdowns, and `section_count_in` patterns
+ *  - `sectionBoundaries`: start sample indices and metadata for each section
+ *  - `totalSamples`: total number of samples in the generated grid
+ *  - `totalDuration`: total duration in seconds (derived from `totalSamples` / `sampleRate`)
  */
 export function buildTimeGrid(spec: SongSpec, sampleRate: number): TimeGrid {
   const beats: BeatPosition[] = [];
