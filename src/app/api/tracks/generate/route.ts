@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import path from 'path';
-import fs from 'fs/promises';
-import type { SongSpec, ApiError } from '@/types';
+import type { SongSpec } from '@/types';
+import { buildTimeGrid } from '@/lib/audio/grid';
+import { DEFAULT_SAMPLE_RATE } from '@/lib/audio/types';
 
 export const maxDuration = 60;
+export const runtime = 'nodejs';
 
 // ---------------------------------------------------------------------------
 // Validation helpers
@@ -12,7 +13,18 @@ export const maxDuration = 60;
 
 const VALID_CLICK_SOUNDS = ['classic', 'woodblock', 'rimshot', 'hi-hat'] as const;
 const VALID_FORMATS = ['wav', 'mp3'] as const;
+const VALID_COUNT_IN_BARS = [0, 1, 2, 3, 4] as const;
 
+/**
+ * Validate an arbitrary value as a SongSpec and collect any validation errors.
+ *
+ * Validates required song-spec fields (title, bpm, timeSignature, sections, voiceId,
+ * clickSound, format, boolean flags, and countInBars) and returns the original value
+ * cast to `SongSpec` together with any validation messages.
+ *
+ * @param body - The parsed JSON request body to validate
+ * @returns An object with `spec` set to the input cast as `SongSpec` (only meaningful when `errors` is empty) and `errors` containing any validation error messages
+ */
 function validateSpec(body: unknown): { spec: SongSpec; errors: string[] } {
   const errors: string[] = [];
 
@@ -103,34 +115,50 @@ function validateSpec(body: unknown): { spec: SongSpec; errors: string[] } {
     errors.push('enableBarCountdown must be a boolean');
   }
 
-  // countInBars
-  if (typeof b.countInBars !== 'number' || ![0, 1, 2].includes(b.countInBars)) {
-    errors.push('countInBars must be 0, 1, or 2');
+  // countInBars — P0-1 fix: widen from [0, 1, 2] to [0, 1, 2, 3, 4] to match the
+  // /create UI which surfaces buttons for 1, 2, 3, 4. The default in the form is
+  // 2 (which previously passed), but any user clicking 3 or 4 hit a 400.
+  if (
+    typeof b.countInBars !== 'number' ||
+    !VALID_COUNT_IN_BARS.includes(b.countInBars as typeof VALID_COUNT_IN_BARS[number])
+  ) {
+    errors.push(`countInBars must be one of: ${VALID_COUNT_IN_BARS.join(', ')}`);
   }
 
   return { spec: body as SongSpec, errors };
 }
 
 // ---------------------------------------------------------------------------
-// Storage directory (local filesystem -- will migrate to GCS)
-// ---------------------------------------------------------------------------
-
-const TRACKS_DIR = path.join(process.cwd(), '.data', 'tracks');
-
-async function ensureTracksDir(): Promise<void> {
-  await fs.mkdir(TRACKS_DIR, { recursive: true });
-}
-
-// ---------------------------------------------------------------------------
 // POST /api/tracks/generate
 // ---------------------------------------------------------------------------
-
+//
+// P0-2 fix: this route no longer writes audio to the filesystem. On Vercel
+// serverless, process.cwd() resolves to /var/task which is read-only, so the
+// previous fs.mkdir/.writeFile calls failed with EROFS and surfaced as the
+// opaque "Track rendering failed" message.
+//
+// New design: the route persists ONLY the SongSpec to the database. The
+// download route re-renders the audio on demand from that spec, which is
+// safe because rendering is deterministic in everything that matters (sample
+// placement, beat grid, TTS via cache, encoder). The noise textures used by
+// the rimshot and hi-hat click sounds use Math.random() and are not byte-
+// identical across renders, but the audible result is indistinguishable.
+//
+// Duration is computed from the time grid alone, which is cheap. Audio is
+// NOT rendered at generate time, so this route is now O(grid) regardless of
+// song length, and "Track rendering failed" can only mean a DB write failed.
+/**
+ * Handle POST requests to create a new track entry from a SongSpec payload, compute its duration from the time grid, persist the spec to the database, and return the saved track metadata.
+ *
+ * @param request - Next.js request whose JSON body must be a valid `SongSpec`
+ * @returns JSON response with either the saved track metadata (`id`, `previewUrl`, `status`, `duration`) or an error object containing `error` and optional `details`
+ */
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json<ApiError>(
+    return NextResponse.json(
       { error: 'Invalid JSON in request body' },
       { status: 400 },
     );
@@ -139,85 +167,74 @@ export async function POST(request: NextRequest) {
   // --- Validate --------------------------------------------------------
   const { spec, errors } = validateSpec(body);
   if (errors.length > 0) {
-    return NextResponse.json<ApiError>(
+    return NextResponse.json(
       { error: 'Validation failed', details: errors },
       { status: 400 },
+    );
+  }
+
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      {
+        error: 'Server not configured',
+        details:
+          'DATABASE_URL is required. Set DATABASE_URL in your environment ' +
+          '(Neon Postgres connection string) and redeploy.',
+      },
+      { status: 500 },
     );
   }
 
   const trackId = crypto.randomUUID();
 
   try {
-    // --- Render audio ---------------------------------------------------
-    // Dynamic import so we only load the heavy audio engine on this route
-    const { renderTrack } = await import('@/lib/audio/engine');
-    const result = await renderTrack(spec);
+    // --- Compute duration from the grid (no audio render) -------------
+    const grid = buildTimeGrid(spec, DEFAULT_SAMPLE_RATE);
+    const durationSec = Math.round(grid.totalDuration);
 
-    // --- Persist to local filesystem ------------------------------------
-    await ensureTracksDir();
-    const ext = spec.format;
-    const fullPath = path.join(TRACKS_DIR, `${trackId}.${ext}`);
-    const previewPath = path.join(TRACKS_DIR, `${trackId}_preview.${ext}`);
-
-    await Promise.all([
-      fs.writeFile(fullPath, result.fullTrack),
-      fs.writeFile(previewPath, result.preview),
-    ]);
-
+    // --- Persist spec to DB ------------------------------------------
     const previewUrl = `/api/tracks/${trackId}/download?preview=true`;
     const fullUrl = `/api/tracks/${trackId}/download`;
 
-    // --- Save to database (or fall back to in-memory) -------------------
-    let savedRecord: {
-      id: string;
-      previewUrl: string;
-      status: string;
-      duration: number;
-    } | null = null;
+    const { db, tracks } = await import('@/lib/db');
+    const rows = await db
+      .insert(tracks)
+      .values({
+        id: trackId,
+        title: spec.title,
+        spec,
+        status: 'ready',
+        previewUrl,
+        fullUrl,
+        duration: durationSec,
+      })
+      .returning({
+        id: tracks.id,
+        previewUrl: tracks.previewUrl,
+        status: tracks.status,
+        duration: tracks.duration,
+      });
 
-    if (process.env.DATABASE_URL) {
-      try {
-        const { db, tracks } = await import('@/lib/db');
-        const rows = await db
-          .insert(tracks)
-          .values({
-            id: trackId,
-            title: spec.title,
-            spec,
-            status: 'ready',
-            previewUrl,
-            fullUrl,
-            duration: Math.round(result.duration),
-          })
-          .returning({
-            id: tracks.id,
-            previewUrl: tracks.previewUrl,
-            status: tracks.status,
-            duration: tracks.duration,
-          });
-        savedRecord = rows[0]
-          ? { ...rows[0], previewUrl: rows[0].previewUrl ?? previewUrl, status: rows[0].status, duration: rows[0].duration ?? Math.round(result.duration) }
-          : null;
-      } catch (dbError) {
-        console.warn('[tracks/generate] DB write failed, continuing without persistence:', dbError);
-      }
-    } else {
-      console.info('[tracks/generate] DATABASE_URL not set -- skipping DB write');
+    const saved = rows[0];
+    if (!saved) {
+      return NextResponse.json(
+        { error: 'Track persistence failed', details: 'Insert returned no rows' },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({
-      id: savedRecord?.id ?? trackId,
-      previewUrl: savedRecord?.previewUrl ?? previewUrl,
-      status: savedRecord?.status ?? 'ready',
-      duration: savedRecord?.duration ?? Math.round(result.duration),
+      id: saved.id,
+      previewUrl: saved.previewUrl ?? previewUrl,
+      status: saved.status,
+      duration: saved.duration ?? durationSec,
     });
-  } catch (renderErr) {
-    console.error('[tracks/generate] Render failed:', renderErr);
-    return NextResponse.json<ApiError>(
+  } catch (err) {
+    console.error('[tracks/generate] Persistence failed:', err);
+    return NextResponse.json(
       {
-        error: 'Track rendering failed',
-        details:
-          renderErr instanceof Error ? renderErr.message : 'Unknown error',
+        error: 'Track persistence failed',
+        details: err instanceof Error ? err.message : 'Unknown error',
       },
       { status: 500 },
     );
