@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { SongSpec, SongSection, TimeSignature } from '@/types';
+import { AVAILABLE_VOICES } from '@/lib/audio/types';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -19,12 +20,19 @@ const TIME_SIGNATURES: { value: string; label: string; ts: TimeSignature }[] = [
   { value: 'custom', label: 'Custom', ts: { beats: 4, subdivision: 4 } },
 ];
 
-const VOICE_OPTIONS = [
-  { value: 'en-male-1', label: 'Male -- Clear' },
-  { value: 'en-female-1', label: 'Female -- Clear' },
-  { value: 'en-male-2', label: 'Male -- Warm' },
-  { value: 'en-female-2', label: 'Female -- Warm' },
-];
+// Voice options derived from the canonical AVAILABLE_VOICES catalog in
+// src/lib/audio/types.ts. Previously this form maintained a separate list with
+// non-Google IDs (`en-male-1`, etc.), which Google Cloud TTS rejected because
+// `voiceId.substring(0, 5)` produced `en-ma` — an invalid languageCode. The
+// route silently fell through to the tone-substitute fallback synth, so users
+// got beeps instead of speech even with credentials configured.
+//
+// Deriving from AVAILABLE_VOICES means new voices added to types.ts appear
+// here automatically with no further form changes.
+const VOICE_OPTIONS = AVAILABLE_VOICES.map((v) => ({
+  value: v.id,
+  label: v.label,
+}));
 
 const CLICK_SOUNDS: { id: SongSpec['clickSound']; label: string; desc: string }[] = [
   { id: 'classic', label: 'Classic', desc: 'Standard sine wave click' },
@@ -69,7 +77,7 @@ const DEFAULT_SPEC: SongSpec = {
   bpm: 120,
   timeSignature: { beats: 4, subdivision: 4 },
   sections: [],
-  voiceId: 'en-male-1',
+  voiceId: AVAILABLE_VOICES[0]?.id ?? 'en-US-Studio-M',
   clickSound: 'classic',
   format: 'wav',
   enableCountIn: true,

@@ -45,8 +45,39 @@ export interface BeatPosition {
   sectionName: string;
 }
 
+/**
+ * A spoken cue placed in the rendered track.
+ *
+ * Cue types:
+ * - 'section_announce': single utterance of the section name. Fires at sample 0
+ *   for the first section when no count-in pre-roll is configured, or one bar
+ *   before each subsequent section when count-in is disabled.
+ * - 'count_in': single beat-digit (e.g. "1", "2", "3", "4"), emitted on each
+ *   beat of the count-in bars before the song starts.
+ * - 'bar_countdown': "N bar(s)" countdown placed at the downbeat of each bar
+ *   in the four-bar window before a section transition.
+ * - 'section_count_in': a SEQUENCE of atomic cues spanning one bar, conveying
+ *   the upcoming section name on beat 1 followed by the count digits on beats
+ *   2..N. Each cue in the sequence is independent: the cueSamples map is keyed
+ *   by `text`, so the mixer treats each entry as a standard single-text cue.
+ *
+ *   For mid-song transitions (sectionIdx >= 1) and for the intro when
+ *   countInBars === 1, the grid emits one section_count_in cue per beat of the
+ *   target bar. Example for a 4/4 transition into "Chorus":
+ *     { type: 'section_count_in', text: 'Chorus', sectionName: 'Chorus', ... }
+ *     { type: 'section_count_in', text: '2',      sectionName: 'Chorus', ... }
+ *     { type: 'section_count_in', text: '3',      sectionName: 'Chorus', ... }
+ *     { type: 'section_count_in', text: '4',      sectionName: 'Chorus', ... }
+ *
+ *   The atomic decomposition is intentional: engine.ts collects unique cue
+ *   texts via `uniqueTexts.add(cue.text)`, and mixer.ts looks each cue up by
+ *   `cue.text`. Splitting into atomic cues means neither file needs to learn
+ *   the compound-cue shape. The `section_count_in` type label is preserved so
+ *   downstream consumers (debug tools, future per-cue volume control, etc.)
+ *   can still distinguish transition-count cues from regular count-in cues.
+ */
 export interface CueEvent {
-  type: 'section_announce' | 'count_in' | 'bar_countdown';
+  type: 'section_announce' | 'count_in' | 'bar_countdown' | 'section_count_in';
   sampleIndex: number;
   text: string;
   sectionName: string;

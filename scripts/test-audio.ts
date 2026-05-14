@@ -4,6 +4,10 @@
  * clicks, accents, voice cue placement, and total duration all match the spec.
  *
  * Run: node --experimental-strip-types scripts/test-audio.ts
+ *
+ * Note: Test 2 cue counts have been updated to reflect the section_count_in
+ * pattern added for criterion 3 (intro pre-roll + mid-song transition count-ins).
+ * See scripts/test-section-cues.ts for detailed pattern assertions.
  */
 
 import { buildTimeGrid } from '../src/lib/audio/grid.ts';
@@ -62,12 +66,22 @@ assert(grid.beats.length === expectedTotalBeats, `Total beats = ${expectedTotalB
 assertClose(grid.totalDuration, expectedDuration, 0.01, `Total duration = ${expectedDuration}s`);
 
 console.log('\n=== Test 2: Cue Events ===');
+// Cue counts under the new section_count_in behavior:
+//   - countInBars=1 + announce + countIn → compact intro mode: 4 section_count_in
+//     cues on the single count-in bar (one per beat in 4/4)
+//   - 4 mid-song transitions × 4 beats each = 16 section_count_in cues
+//   - Total section_count_in = 4 + 16 = 20
+//   - section_announce = 0 (intro uses section_count_in, transitions also use it)
+//   - count_in = 0 (replaced by section_count_in for compact intro)
+//   - bar_countdown unchanged at 17 (3+4+4+3+3 across the 5 sections)
 const sectionAnnounces = grid.cues.filter(c => c.type === 'section_announce');
 const countIns = grid.cues.filter(c => c.type === 'count_in');
 const barCountdowns = grid.cues.filter(c => c.type === 'bar_countdown');
-assert(sectionAnnounces.length === 5, `5 section announcements (got ${sectionAnnounces.length})`);
-assert(countIns.length === 4, `4 count-in events (got ${countIns.length})`);
-assert(barCountdowns.length === 17, `17 bar countdown events (got ${barCountdowns.length})`);
+const sectionCountIns = grid.cues.filter(c => c.type === 'section_count_in');
+assert(sectionAnnounces.length === 0, `0 section_announce cues (got ${sectionAnnounces.length})`);
+assert(countIns.length === 0, `0 count_in cues (got ${countIns.length})`);
+assert(barCountdowns.length === 17, `17 bar_countdown cues (got ${barCountdowns.length})`);
+assert(sectionCountIns.length === 20, `20 section_count_in cues (got ${sectionCountIns.length})`);
 
 console.log('\n=== Test 3: Click Synthesis ===');
 for (const clickType of ['classic', 'woodblock', 'rimshot', 'hi-hat'] as const) {
@@ -96,7 +110,10 @@ console.log('\n=== Test 5: Full Mix and WAV Encoding ===');
 const downbeatClick = generateClick('classic', true, SAMPLE_RATE);
 const regularClick = generateClick('classic', false, SAMPLE_RATE);
 const cueSamples = new Map<string, Float32Array>();
-for (const text of ['Intro', 'Verse', 'Chorus', 'Bridge', 'Outro', '1', '2', '3', '4', '1 bar', '2 bars', '3 bars', '4 bars']) {
+// Cue text catalog under the new pattern: section names + digit count words
+// ("2", "3", "4") + bar countdowns. "1" is no longer used as a count-in word
+// because beat 1 of each section_count_in pattern carries the section name.
+for (const text of ['Intro', 'Verse', 'Chorus', 'Bridge', 'Outro', '2', '3', '4', '1 bar', '2 bars', '3 bars', '4 bars']) {
   const samples = new Float32Array(Math.round(SAMPLE_RATE * 0.1));
   const freq = 330 + (text.charCodeAt(0) % 5) * 40;
   for (let i = 0; i < samples.length; i++) {

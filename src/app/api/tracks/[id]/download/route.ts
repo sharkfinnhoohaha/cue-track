@@ -1,19 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import path from 'path';
-import fs from 'fs/promises';
 import { eq, and } from 'drizzle-orm';
-import type { ApiError } from '@/types';
+import type { SongSpec } from '@/types';
 
-// ---------------------------------------------------------------------------
-// Local storage path (mirrors generate route; will migrate to GCS in P2)
-// ---------------------------------------------------------------------------
-
-const TRACKS_DIR = path.join(process.cwd(), '.data', 'tracks');
+export const maxDuration = 60;
+export const runtime = 'nodejs';
 
 // ---------------------------------------------------------------------------
 // GET /api/tracks/[id]/download?preview=true
 // ---------------------------------------------------------------------------
-
+//
+// P0-2 fix: this route no longer reads audio files from the filesystem. The
+// generate route persists only the SongSpec; this route re-renders the audio
+// on demand from that spec via the existing renderTrack engine.
+//
+// Re-rendering on download is acceptable at V1 volume:
+//   - Click placement is sample-accurate and deterministic
+//   - Click synthesis is deterministic for classic and woodblock
+//   - Rimshot and hi-hat use Math.random() for noise; audibly indistinguishable
+//     across renders, but not byte-identical
+//   - TTS results are cached in-process by voiceId:text, so subsequent renders
+//     in the same warm Lambda reuse cached audio
+//   - Encoder is deterministic given input
+//
+// Render cost for a typical 4-minute track is 3-8s on Vercel Pro, well inside
+// the 60s function limit. Hobby tier (10s) will be tight for longer tracks;
+// the audit recommends staying on Pro.
+//
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } },
@@ -23,7 +35,7 @@ export async function GET(
   const isPreview = searchParams.get('preview') === 'true';
 
   if (!id || typeof id !== 'string') {
-    return NextResponse.json<ApiError>(
+    return NextResponse.json(
       { error: 'Track ID is required' },
       { status: 400 },
     );
@@ -31,17 +43,27 @@ export async function GET(
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRe.test(id)) {
-    return NextResponse.json<ApiError>(
+    return NextResponse.json(
       { error: 'Invalid track ID format' },
       { status: 400 },
     );
   }
 
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      {
+        error: 'Server not configured',
+        details: 'DATABASE_URL is required for track download',
+      },
+      { status: 500 },
+    );
+  }
+
   // --- Payment gate (skip for previews) --------------------------------
   if (!isPreview) {
-    const authResult = await checkPaymentAccess(id);
-    if (!authResult.allowed) {
-      return NextResponse.json<ApiError>(
+    const access = await checkPaymentAccess(id);
+    if (!access.allowed) {
+      return NextResponse.json(
         {
           error: 'Payment required',
           code: 'PAYMENT_REQUIRED',
@@ -55,62 +77,65 @@ export async function GET(
     }
   }
 
-  // --- Determine file format from DB or fall back to wav ----------------
-  let ext = 'wav';
-  if (process.env.DATABASE_URL) {
-    try {
-      const { db, tracks } = await import('@/lib/db');
-      const rows = await db.select({ spec: tracks.spec }).from(tracks).where(eq(tracks.id, id)).limit(1);
-      if (rows.length > 0 && rows[0].spec?.format) {
-        ext = rows[0].spec.format;
-      }
-    } catch {
-      // Fall through; use default ext.
-    }
+  // --- Load spec from DB ----------------------------------------------
+  const { db, tracks } = await import('@/lib/db');
+  const rows = await db
+    .select({ spec: tracks.spec, status: tracks.status, title: tracks.title })
+    .from(tracks)
+    .where(eq(tracks.id, id))
+    .limit(1);
+
+  if (rows.length === 0) {
+    return NextResponse.json(
+      { error: 'Track not found' },
+      { status: 404 },
+    );
   }
 
-  // --- Resolve file path ------------------------------------------------
-  const suffix = isPreview ? `_preview.${ext}` : `.${ext}`;
-  const filePath = path.join(TRACKS_DIR, `${id}${suffix}`);
+  const row = rows[0];
+  if (row.status === 'failed') {
+    return NextResponse.json(
+      { error: 'Track is in failed state', details: 'Re-generate the track' },
+      { status: 410 },
+    );
+  }
 
-  // Try both extensions if the default is not found
-  let resolvedPath = filePath;
+  const spec = row.spec as SongSpec;
+  const ext = spec.format;
+
+  // --- Render audio on demand -----------------------------------------
+  let audio: Buffer;
   try {
-    await fs.access(resolvedPath);
-  } catch {
-    // Try the other format
-    const altExt = ext === 'wav' ? 'mp3' : 'wav';
-    const altSuffix = isPreview ? `_preview.${altExt}` : `.${altExt}`;
-    const altPath = path.join(TRACKS_DIR, `${id}${altSuffix}`);
-    try {
-      await fs.access(altPath);
-      resolvedPath = altPath;
-      ext = altExt;
-    } catch {
-      return NextResponse.json<ApiError>(
-        { error: 'Track file not found' },
-        { status: 404 },
-      );
+    const { renderTrack, renderPreviewOnly } = await import('@/lib/audio/engine');
+    if (isPreview) {
+      audio = await renderPreviewOnly(spec);
+    } else {
+      const result = await renderTrack(spec);
+      audio = result.fullTrack;
     }
+  } catch (err) {
+    console.error('[tracks/download] Render failed:', err);
+    return NextResponse.json(
+      {
+        error: 'Track rendering failed',
+        details: err instanceof Error ? err.message : 'Unknown error',
+      },
+      { status: 500 },
+    );
   }
 
-  // --- Stream the file --------------------------------------------------
-  const fileBuffer = await fs.readFile(resolvedPath);
+  // --- Stream the audio bytes -----------------------------------------
   const contentType = ext === 'mp3' ? 'audio/mpeg' : 'audio/wav';
   const disposition = isPreview ? 'inline' : 'attachment';
+  const safeTitle = sanitizeFilename(row.title) || id;
   const filename = isPreview
-    ? `preview_${id}.${ext}`
-    : `cuetrack_${id}.${ext}`;
+    ? `preview_${safeTitle}.${ext}`
+    : `cuetrack_${safeTitle}.${ext}`;
 
-  // Cast buf.buffer to ArrayBuffer so the Uint8Array generic resolves to
-  // Uint8Array<ArrayBuffer> (not Uint8Array<ArrayBufferLike>), which is
-  // what BufferSource/BodyInit expects under TS 5.7 + @types/node 22.
-  // Node Buffer is always ArrayBuffer-backed at runtime (never
-  // SharedArrayBuffer), so the cast is safe. View, no copy.
   const body = new Uint8Array(
-    fileBuffer.buffer as ArrayBuffer,
-    fileBuffer.byteOffset,
-    fileBuffer.byteLength,
+    audio.buffer as ArrayBuffer,
+    audio.byteOffset,
+    audio.byteLength,
   );
 
   return new NextResponse(body, {
@@ -118,31 +143,36 @@ export async function GET(
     headers: {
       'Content-Type': contentType,
       'Content-Disposition': `${disposition}; filename="${filename}"`,
-      'Content-Length': String(fileBuffer.length),
-      'Cache-Control': 'private, max-age=3600',
+      'Content-Length': String(audio.length),
+      // Previews can be cached more aggressively since they're deterministic.
+      // Full downloads are private (per-purchase) and should not be shared.
+      'Cache-Control': isPreview ? 'public, max-age=3600' : 'private, max-age=0, must-revalidate',
     },
   });
 }
 
 // ---------------------------------------------------------------------------
-// Payment / subscription check
+// Helpers
 // ---------------------------------------------------------------------------
+
+function sanitizeFilename(name: string | null | undefined): string {
+  if (!name) return '';
+  return name
+    .replace(/[^a-z0-9_\-]+/gi, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 80);
+}
 
 interface AccessResult {
   allowed: boolean;
 }
 
 async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
-  if (!process.env.DATABASE_URL) {
-    // Demo mode: allow all downloads when DB is not configured
-    console.info('[download] DATABASE_URL not set; allowing download in demo mode');
-    return { allowed: true };
-  }
-
+  // DATABASE_URL is required at the top of GET; if we got here, it is set.
   try {
     const { db, purchases, users, tracks } = await import('@/lib/db');
 
-    // Check 1: Does a paid purchase exist for this track?
+    // Check 1: paid purchase exists for this track
     const paidPurchase = await db
       .select({ id: purchases.id })
       .from(purchases)
@@ -158,7 +188,7 @@ async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
       return { allowed: true };
     }
 
-    // Check 2: Is the track owner a Pro subscriber?
+    // Check 2: track owner is an active Pro subscriber
     const trackRows = await db
       .select({ userId: tracks.userId })
       .from(tracks)
@@ -180,8 +210,8 @@ async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
     return { allowed: false };
   } catch (dbError) {
     console.error('[download] Payment check failed:', dbError);
-    // Fail open on DB errors; log for investigation.
-    // In production you may prefer fail-closed.
-    return { allowed: true };
+    // Fail closed when the DB check itself errors. Previously this failed open,
+    // which is permissive but risky once real payments are flowing.
+    return { allowed: false };
   }
 }
