@@ -4,6 +4,56 @@
 
 ---
 
+## QUICKSTART (V1 on vercel.app subdomain)
+
+The "flip to live" sections below are for the cuetrack.app launch. This quickstart gets the app working RIGHT NOW on the `cue-track-sharkfinnhoohahas-projects.vercel.app` URL with test-mode payments, free-tier services, and no money spent.
+
+### Already done (agent set these on Vercel production)
+- `NEXTAUTH_SECRET` (openssl rand -base64 32)
+- `NEXTAUTH_URL` = `https://cue-track-sharkfinnhoohahas-projects.vercel.app`
+- `NEXT_PUBLIC_SITE_URL` = same
+
+Verify with `vercel env ls` from the repo root.
+
+### Your turn (~30 min total)
+
+**1. Neon free tier (5 min, $0)**
+- Sign up at https://neon.tech, create a project in `us-east-1` (Vercel iad1 region)
+- Connection Details → copy the **Pooled** connection string (must be pooled for serverless)
+- `vercel env add DATABASE_URL production` and paste the URL
+- From the repo root: `npx drizzle-kit push` to create the schema against the new DB
+
+**2. Stripe test mode (15 min, $0)**
+- Sign up / log in at https://dashboard.stripe.com, ensure Test mode toggle is ON (top-left)
+- API Keys: copy `sk_test_*` and `pk_test_*`
+  - `vercel env add STRIPE_SECRET_KEY production` (paste `sk_test_*`)
+  - `vercel env add STRIPE_PUBLISHABLE_KEY production` (paste `pk_test_*`)
+- Products → create "Single Track Download" (one-time, $3.00 USD), copy price ID `price_*`
+  - `vercel env add STRIPE_SINGLE_PRICE_ID production`
+- Create "Cue Track Pro" (recurring monthly, $19.00 USD), copy price ID
+  - `vercel env add STRIPE_PRO_PRICE_ID production`
+- Developers → Webhooks → Add endpoint: `https://cue-track-sharkfinnhoohahas-projects.vercel.app/api/stripe/webhook`. Subscribe to `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`. Copy signing secret `whsec_*`
+  - `vercel env add STRIPE_WEBHOOK_SECRET production`
+
+**3. Google TTS (optional, 5 min, $0 within free tier)**
+- Skip if tone-cue fallback is fine for V1. Code falls back to tone synthesis when both `GOOGLE_TTS_API_KEY` and `GOOGLE_APPLICATION_CREDENTIALS` are unset.
+- If you want real voice cues: GCP Console → APIs & Services → Credentials → Create API Key, restrict to "Cloud Text-to-Speech API"
+  - `vercel env add GOOGLE_TTS_API_KEY production`
+
+**4. Redeploy and smoke test**
+- `vercel --prod` (or push any commit; Vercel auto-deploys main)
+- Visit the production URL, sign up, generate a track, complete a test purchase (Stripe test card: `4242 4242 4242 4242`, any future expiry, any CVC)
+- Download flow re-renders audio on demand from the persisted SongSpec (no separate storage needed)
+
+### What's deliberately NOT in V1
+- Custom domain (`cuetrack.app`) — buy and DNS-flip later
+- Resend / transactional email — magic-link auth replaced by Stripe Checkout success_url polling
+- Sentry — DSN can be added later; init is gated so missing creds are silent no-ops
+- Cloud Run audio worker — wire `AUDIO_WORKER_URL` only when generation needs > 60s
+- Live Stripe keys — flip when V1 customers exist
+
+---
+
 ## Environment Variables
 
 Set all of these in Vercel before the production deployment. Group them exactly as listed below so you can audit them systematically.
@@ -45,8 +95,8 @@ Note: On Vercel, you cannot use `GOOGLE_APPLICATION_CREDENTIALS` as a file path 
 | `STRIPE_SECRET_KEY` | `sk_live_...` | Stripe Dashboard → Developers → API Keys → Secret key (live mode) |
 | `STRIPE_PUBLISHABLE_KEY` | `pk_live_...` | Stripe Dashboard → Developers → API Keys → Publishable key (live mode) |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_...` | Stripe Dashboard → Developers → Webhooks → your endpoint → Signing secret |
-| `STRIPE_PRICE_SINGLE` | `price_...` | Create in Stripe Dashboard: one-time, $3.00 USD |
-| `STRIPE_PRICE_PRO` | `price_...` | Create in Stripe Dashboard: recurring monthly, $19.00 USD |
+| `STRIPE_SINGLE_PRICE_ID` | `price_...` | Create in Stripe Dashboard: one-time, $3.00 USD |
+| `STRIPE_PRO_PRICE_ID` | `price_...` | Create in Stripe Dashboard: recurring monthly, $19.00 USD |
 
 **Checklist before flipping Stripe:**
 - [ ] Toggle Stripe dashboard to live mode (top-left toggle)
