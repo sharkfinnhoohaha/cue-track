@@ -7,8 +7,22 @@ import {
   timestamp,
   pgEnum,
   index,
+  customType,
 } from 'drizzle-orm/pg-core';
 import type { SongSpec } from '@/types';
+
+/**
+ * Drizzle custom type for Postgres `bytea`. The Neon HTTP driver returns
+ * bytea values as either Buffer/Uint8Array or as the Postgres wire-format
+ * hex string `\x...`; downstream consumers normalize that in
+ * src/lib/audio/tts.ts. Drizzle just needs to know how to declare the
+ * column type in DDL and how to type the value at compile time.
+ */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
 
 // --- Enums ---
 
@@ -133,6 +147,34 @@ export const rateLimits = pgTable(
   }),
 );
 
+// --- TTS caching ---
+
+/**
+ * Persistent Google Cloud TTS output, keyed by "{voiceId}:{sha256(text)}".
+ * Read/written by src/lib/audio/tts.ts and services/audio-worker/lib/
+ * audio/tts.ts on cue synthesis. Without this table the in-process Map
+ * evaporates on every cold start and TTS cost scales with traffic instead
+ * of with unique cue strings.
+ *
+ * audio: raw little-endian Float32 PCM at sample_rate Hz.
+ *
+ * The audio engine uses raw SQL via the neon HTTP client to read/write
+ * this table (not Drizzle's query builder), so this definition exists
+ * primarily so that `drizzle-kit push` provisions the table on fresh
+ * databases and so that other future Drizzle consumers have a typed
+ * reference.
+ *
+ * Migration: scripts/migrations/2026-05-17b_add_tts_cache.sql
+ */
+export const ttsCache = pgTable('tts_cache', {
+  cacheKey: text('cache_key').primaryKey(),
+  audio: bytea('audio').notNull(),
+  sampleRate: integer('sample_rate').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // --- Inferred types ---
 
 export type Track = typeof tracks.$inferSelect;
@@ -158,3 +200,6 @@ export type NewVerificationToken = typeof verificationTokens.$inferInsert;
 
 export type RateLimit = typeof rateLimits.$inferSelect;
 export type NewRateLimit = typeof rateLimits.$inferInsert;
+
+export type TtsCacheRow = typeof ttsCache.$inferSelect;
+export type NewTtsCacheRow = typeof ttsCache.$inferInsert;
