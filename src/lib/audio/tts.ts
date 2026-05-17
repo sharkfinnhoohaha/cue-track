@@ -33,6 +33,25 @@ function hasGoogleCredentials(): boolean {
 }
 
 /**
+ * Whether the synthesizer should refuse to fall back to tone substitution
+ * when Google Cloud TTS credentials are missing.
+ *
+ * Strict when TTS_STRICT === 'true' explicitly, OR when TTS_STRICT is unset
+ * and NODE_ENV === 'production'. Set TTS_STRICT=false to force the dev
+ * fallback path even in production (escape hatch for emergency recovery).
+ *
+ * Without this, an unconfigured production Vercel deploy silently ships
+ * tracks full of fallback beep tones with only a console.warn, and users
+ * have no signal that TTS is broken.
+ */
+function isTtsStrict(): boolean {
+  const raw = process.env.TTS_STRICT;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return process.env.NODE_ENV === 'production';
+}
+
+/**
  * Synthesize speech for a given text and voice.
  * Uses Google Cloud TTS when credentials are available, otherwise falls back
  * to a simple tone-based substitute for testing.
@@ -59,6 +78,13 @@ export async function synthesizeSpeech(
   if (hasGoogleCredentials()) {
     result = await synthesizeWithGoogle(text, voiceId);
   } else {
+    if (isTtsStrict()) {
+      throw new Error(
+        'TTS credentials missing: set GOOGLE_TTS_API_KEY (preferred on '
+        + 'Vercel) or GOOGLE_APPLICATION_CREDENTIALS, or set TTS_STRICT=false '
+        + 'to allow fallback tone substitution.',
+      );
+    }
     result = synthesizeFallback(text);
   }
 
