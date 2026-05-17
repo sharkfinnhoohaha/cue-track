@@ -12,6 +12,7 @@ import { SectionList } from '@/components/section-list';
 import { cn } from '@/lib/cn';
 
 const SKIP_SIGNUP_STORAGE_KEY = 'cuetrack:skip-signup-prompt';
+const PENDING_SPEC_STORAGE_KEY = 'cuetrack:pending-spec';
 
 const TIME_SIGNATURES: { value: string; label: string; ts: TimeSignature }[] = [
   { value: '4/4', label: '4/4', ts: { beats: 4, subdivision: 4 } },
@@ -152,6 +153,11 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
   // anonymous users who already dismissed the modal once aren't re-prompted
   // every submit. SessionStorage (not local) so the prompt comes back next
   // browser session, when their rate-limit window has likely reset anyway.
+  //
+  // Also restore any pending spec stashed by the sign-up redirect path. When
+  // an anon user clicks "Sign up" in the modal, we serialize their
+  // in-progress spec to sessionStorage before redirecting to /auth/signin so
+  // they don't lose their work coming back through the magic-link flow.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
@@ -160,6 +166,32 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
       }
     } catch {
       // sessionStorage may be unavailable (private mode, quota); ignore.
+    }
+    try {
+      const pending = window.sessionStorage.getItem(PENDING_SPEC_STORAGE_KEY);
+      if (pending) {
+        const parsed = JSON.parse(pending) as SongSpec;
+        // Defensive shape check: must look like a SongSpec. If the stored
+        // object is corrupt or from a previous schema, discard and fall
+        // through to the default. Worst case the user re-enters the spec.
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          typeof parsed.bpm === 'number' &&
+          Array.isArray(parsed.sections)
+        ) {
+          setSpec(parsed);
+        }
+        window.sessionStorage.removeItem(PENDING_SPEC_STORAGE_KEY);
+      }
+    } catch {
+      // Bad JSON or storage unavailable; drop the pending key if present and
+      // continue with the default spec.
+      try {
+        window.sessionStorage.removeItem(PENDING_SPEC_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
     }
   }, []);
 
@@ -356,8 +388,19 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
       {showSignupPrompt && (
         <SignupPromptModal
           onSignUp={() => {
-            // Persist the in-progress spec? Not in V1: signing in redirects
-            // back to /create with the default empty spec. Documented gap.
+            // Stash the in-progress spec so the magic-link flow lands the
+            // user back on /create with their form repopulated. Cleared on
+            // mount once consumed. Failure to write (private mode, quota)
+            // is non-fatal; the redirect proceeds and the user just
+            // re-enters the spec on return.
+            try {
+              window.sessionStorage.setItem(
+                PENDING_SPEC_STORAGE_KEY,
+                JSON.stringify(spec),
+              );
+            } catch {
+              // ignore
+            }
             window.location.href = '/auth/signin?callbackUrl=/create';
           }}
           onSkip={() => {
