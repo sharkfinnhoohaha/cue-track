@@ -87,7 +87,12 @@ export async function GET(
   // --- Load spec from DB ----------------------------------------------
   const { db, tracks } = await import('@/lib/db');
   const rows = await db
-    .select({ spec: tracks.spec, status: tracks.status, title: tracks.title })
+    .select({
+      spec: tracks.spec,
+      status: tracks.status,
+      title: tracks.title,
+      duration: tracks.duration,
+    })
     .from(tracks)
     .where(eq(tracks.id, id))
     .limit(1);
@@ -109,19 +114,44 @@ export async function GET(
 
   const spec = row.spec as SongSpec;
   const ext = spec.format;
+  const durationSec = row.duration ?? 0;
 
   // --- Render audio on demand -----------------------------------------
+  // Routing rule:
+  //   - Previews always render in-process (~15s of audio, fast)
+  //   - Full tracks render in-process by default
+  //   - Full tracks offload to the Cloud Run worker when:
+  //       AUDIO_WORKER_URL is set, AND
+  //       track duration >= AUDIO_WORKER_THRESHOLD_SECONDS (default 240)
   let audio: Buffer;
   try {
-    const { renderTrack, renderPreviewOnly } = await import('@/lib/audio/engine');
-    if (isPreview) {
+    if (!isPreview && shouldOffloadToWorker(durationSec)) {
+      audio = await renderViaWorker(id, spec, false);
+    } else if (isPreview) {
+      const { renderPreviewOnly } = await import('@/lib/audio/engine');
       audio = await renderPreviewOnly(spec);
     } else {
+      const { renderTrack } = await import('@/lib/audio/engine');
       const result = await renderTrack(spec);
       audio = result.fullTrack;
     }
   } catch (err) {
     console.error('[tracks/download] Render failed:', err);
+
+    // Worker infra/network errors are transient; surface as 503 without
+    // marking the track as 'failed' so retries can succeed and so a worker
+    // outage does not cascade into permanent data state. Render errors
+    // (in-process exceptions, or worker-rejected specs) fall through to
+    // the 'failed' update below.
+    if (err instanceof WorkerUnavailableError) {
+      return NextResponse.json(
+        {
+          error: 'Audio worker temporarily unavailable',
+          details: err.message,
+        },
+        { status: 503 },
+      );
+    }
 
     // Best-effort: mark the track as failed so the 410 path above (line
     // ~103) becomes reachable on subsequent downloads of the same id.
@@ -129,11 +159,11 @@ export async function GET(
     // the original render error; we still return the 500 below either way.
     //
     // Accepted trade-off: false-positive failures (transient TTS rate
-    // limits, network blips) will mark the track as 'failed' too. The
-    // operator can manually flip status back to 'ready' to allow re-render.
-    // For configuration errors (e.g. TTS_STRICT=true with no creds), every
-    // attempted render will set 'failed' until config is fixed; this is
-    // acceptable because the failure surface is loud rather than silent.
+    // limits, in-process network blips) will mark the track as 'failed' too.
+    // The operator can manually flip status back to 'ready' to allow re-
+    // render. For configuration errors (e.g. TTS_STRICT=true with no creds),
+    // every attempted render will set 'failed' until config is fixed; this
+    // is acceptable because the failure surface is loud rather than silent.
     try {
       await db
         .update(tracks)
@@ -180,6 +210,123 @@ export async function GET(
       'Cache-Control': isPreview ? 'public, max-age=3600' : 'private, max-age=0, must-revalidate',
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Worker offload
+// ---------------------------------------------------------------------------
+
+/**
+ * Network/infra-level failure talking to the Cloud Run audio worker
+ * (timeout, fetch error, 401/403, 5xx). Distinguished from a real render
+ * failure so the route can return 503 (transient) without marking the
+ * track as 'failed' in the DB. Worker-side validation errors (4xx other
+ * than 401/403) throw a regular Error so they are treated as render
+ * failures and surface as 500 + 'failed' status.
+ */
+class WorkerUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WorkerUnavailableError';
+  }
+}
+
+/**
+ * True when AUDIO_WORKER_URL is set and the track duration crosses the
+ * configured offload threshold (default 240 seconds of audio). Falls
+ * through to in-process render when env is unset or threshold is invalid.
+ */
+function shouldOffloadToWorker(durationSeconds: number): boolean {
+  if (!process.env.AUDIO_WORKER_URL) return false;
+  const raw = process.env.AUDIO_WORKER_THRESHOLD_SECONDS;
+  const threshold = raw ? Number(raw) : 240;
+  if (!Number.isFinite(threshold) || threshold <= 0) return false;
+  return durationSeconds >= threshold;
+}
+
+/**
+ * Render a track on the Cloud Run audio worker and return the requested
+ * variant (full or preview) as raw bytes. POSTs to /render with a shared
+ * secret; the worker responds with both fullTrackBase64 and previewBase64.
+ *
+ * Throws WorkerUnavailableError for network/infra issues (caller treats
+ * as 503 transient); throws regular Error for worker-rejected specs
+ * (caller treats as 500 render failure and marks track 'failed').
+ */
+async function renderViaWorker(
+  trackId: string,
+  spec: SongSpec,
+  isPreview: boolean,
+): Promise<Buffer> {
+  const workerUrl = process.env.AUDIO_WORKER_URL;
+  if (!workerUrl) {
+    throw new WorkerUnavailableError('AUDIO_WORKER_URL is not set');
+  }
+  const secret = process.env.AUDIO_WORKER_SHARED_SECRET;
+  if (!secret) {
+    throw new WorkerUnavailableError(
+      'AUDIO_WORKER_URL is set but AUDIO_WORKER_SHARED_SECRET is missing',
+    );
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 55_000);
+
+  let response: Response;
+  try {
+    response = await fetch(`${workerUrl.replace(/\/$/, '')}/render`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Worker-Secret': secret,
+      },
+      body: JSON.stringify({ trackId, spec }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timer);
+    const name = (err as { name?: string }).name;
+    if (name === 'AbortError') {
+      throw new WorkerUnavailableError(
+        'Audio worker request timed out after 55s',
+      );
+    }
+    throw new WorkerUnavailableError(
+      `Audio worker fetch failed: ${err instanceof Error ? err.message : 'unknown'}`,
+    );
+  }
+  clearTimeout(timer);
+
+  // 401/403 = wrong/missing shared secret (our config), 5xx = worker infra.
+  // Treat both as worker-unavailable so we don't mark the track failed
+  // for what is fundamentally an operator/infrastructure problem.
+  if (response.status === 401 || response.status === 403 || response.status >= 500) {
+    const errText = await response.text().catch(() => '');
+    throw new WorkerUnavailableError(
+      `Audio worker returned ${response.status}: ${errText.slice(0, 500)}`,
+    );
+  }
+
+  // Other 4xx = worker rejected the spec. That's a real render failure
+  // that should mark the track 'failed' (caller's catch block does this).
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(
+      `Audio worker rejected spec (${response.status}): ${errText.slice(0, 500)}`,
+    );
+  }
+
+  const json = (await response.json()) as {
+    fullTrackBase64?: string;
+    previewBase64?: string;
+  };
+
+  const b64 = isPreview ? json.previewBase64 : json.fullTrackBase64;
+  if (!b64) {
+    throw new Error('Audio worker returned empty audio payload');
+  }
+
+  return Buffer.from(b64, 'base64');
 }
 
 // ---------------------------------------------------------------------------
