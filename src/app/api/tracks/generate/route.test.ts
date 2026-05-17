@@ -18,21 +18,39 @@ const {
   mockInsert,
   mockValues,
   mockReturning,
+  mockUpdate,
+  mockUpdateSet,
+  mockUpdateWhere,
+  mockUpdateReturning,
   mockCheckAndRecord,
   mockSubscriptionLookup,
+  mockOwnerLookup,
 } = vi.hoisted(() => {
   const mockReturning = vi.fn();
   const mockValues = vi.fn(() => ({ returning: mockReturning }));
   const mockInsert = vi.fn(() => ({ values: mockValues }));
+
+  const mockUpdateReturning = vi.fn();
+  const mockUpdateWhere = vi.fn(() => ({ returning: mockUpdateReturning }));
+  const mockUpdateSet = vi.fn(() => ({ where: mockUpdateWhere }));
+  const mockUpdate = vi.fn(() => ({ set: mockUpdateSet }));
+
   return {
     mockAuth: vi.fn(),
     mockInsert,
     mockValues,
     mockReturning,
+    mockUpdate,
+    mockUpdateSet,
+    mockUpdateWhere,
+    mockUpdateReturning,
     mockCheckAndRecord: vi.fn(),
-    // Resolves the chain db.select(...).from(users).where(...).limit(1).
+    // Resolves db.select({subscriptionStatus}).from(users).where().limit(1).
     // Returning [] = no row, returning [{ subscriptionStatus }] = found.
     mockSubscriptionLookup: vi.fn(),
+    // Resolves db.select({userId}).from(tracks).where().limit(1) when
+    // /generate is called with existingTrackId and an auth session.
+    mockOwnerLookup: vi.fn(),
   };
 });
 
@@ -41,10 +59,22 @@ vi.mock('@/auth', () => ({ auth: mockAuth }));
 vi.mock('@/lib/db', () => ({
   db: {
     insert: mockInsert,
-    select: vi.fn(() => ({
+    update: mockUpdate,
+    select: vi.fn((cols: Record<string, unknown>) => ({
       from: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnValue({
-          limit: vi.fn().mockImplementation(async () => mockSubscriptionLookup()),
+          limit: vi.fn().mockImplementation(async () => {
+            // Dispatch on the requested columns to the right mock. The
+            // subscription gate selects users.subscriptionStatus; the
+            // ownership check on the UPDATE path selects tracks.userId.
+            if (cols && 'subscriptionStatus' in cols) {
+              return mockSubscriptionLookup();
+            }
+            if (cols && 'userId' in cols) {
+              return mockOwnerLookup();
+            }
+            return [];
+          }),
         }),
       }),
     })),
@@ -54,6 +84,7 @@ vi.mock('@/lib/db', () => ({
     previewUrl: 'mock_preview_column',
     status: 'mock_status_column',
     duration: 'mock_duration_column',
+    userId: 'mock_user_id_column',
   },
   users: {
     id: 'mock_user_id',
@@ -117,9 +148,15 @@ describe('POST /api/tracks/generate', () => {
     mockReturning.mockReset();
     mockValues.mockClear();
     mockInsert.mockClear();
+    mockUpdate.mockClear();
+    mockUpdateSet.mockClear();
+    mockUpdateWhere.mockClear();
+    mockUpdateReturning.mockReset();
     mockCheckAndRecord.mockReset();
     mockSubscriptionLookup.mockReset();
+    mockOwnerLookup.mockReset();
     mockSubscriptionLookup.mockResolvedValue([]);
+    mockOwnerLookup.mockResolvedValue([]);
 
     process.env.DATABASE_URL = 'postgres://mock';
     process.env.RATE_LIMIT_IP_SALT = 'test-salt';
@@ -437,6 +474,122 @@ describe('POST /api/tracks/generate', () => {
       const body = await res.json();
       expect(body.error).toBe('Track persistence failed');
       expect(body.details).toBe('db down');
+    });
+  });
+
+  describe('existingTrackId UPDATE path', () => {
+    const EXISTING_ID = '11111111-2222-3333-4444-555555555555';
+
+    beforeEach(() => {
+      mockUpdateReturning.mockResolvedValue([
+        {
+          id: EXISTING_ID,
+          previewUrl: `/api/tracks/${EXISTING_ID}/download?preview=true`,
+          status: 'ready',
+          duration: 10,
+        },
+      ]);
+    });
+
+    it('rejects a non-UUID existingTrackId with 400', async () => {
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, existingTrackId: 'not-a-uuid' }),
+      );
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.details).toEqual(
+        expect.arrayContaining(['existingTrackId must be a UUID']),
+      );
+    });
+
+    it('UPDATEs the existing row and skips INSERT when id matches', async () => {
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, existingTrackId: EXISTING_ID }),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBe(EXISTING_ID);
+      expect(body.status).toBe('ready');
+
+      expect(mockUpdate).toHaveBeenCalledTimes(1);
+      expect(mockInsert).not.toHaveBeenCalled();
+      const setArg = (mockUpdateSet.mock.calls[0] as unknown as [
+        Record<string, unknown>,
+      ])[0];
+      expect(setArg.status).toBe('ready');
+      expect(setArg.spec).toEqual(VALID_SPEC);
+      expect(setArg.title).toBe(VALID_SPEC.title);
+    });
+
+    it('does NOT include existingTrackId in the persisted spec', async () => {
+      await POST(
+        makeRequest({ ...VALID_SPEC, existingTrackId: EXISTING_ID }),
+      );
+      const setArg = (mockUpdateSet.mock.calls[0] as unknown as [
+        Record<string, unknown>,
+      ])[0];
+      const persistedSpec = setArg.spec as Record<string, unknown>;
+      expect(persistedSpec.existingTrackId).toBeUndefined();
+    });
+
+    it('returns 404 when the UPDATE finds no row', async () => {
+      mockUpdateReturning.mockResolvedValue([]);
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, existingTrackId: EXISTING_ID }),
+      );
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe('Track not found');
+    });
+
+    it('returns 404 when ownership lookup finds no row for auth user', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
+      mockOwnerLookup.mockResolvedValue([]);
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, existingTrackId: EXISTING_ID }),
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 403 when the draft belongs to a different user', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
+      mockOwnerLookup.mockResolvedValue([{ userId: 'user-different' }]);
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, existingTrackId: EXISTING_ID }),
+      );
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toBe('Forbidden');
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('allows the owning user to finalize their own draft', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
+      mockOwnerLookup.mockResolvedValue([{ userId: 'user-abc' }]);
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, existingTrackId: EXISTING_ID }),
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it('allows an auth user to claim an anon draft (userId null)', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
+      mockOwnerLookup.mockResolvedValue([{ userId: null }]);
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, existingTrackId: EXISTING_ID }),
+      );
+      expect(res.status).toBe(200);
+      const setArg = (mockUpdateSet.mock.calls[0] as unknown as [
+        Record<string, unknown>,
+      ])[0];
+      expect(setArg.userId).toBe('user-abc');
+    });
+
+    it('still uses INSERT (not UPDATE) when no existingTrackId is supplied', async () => {
+      const res = await POST(makeRequest(VALID_SPEC));
+      expect(res.status).toBe(200);
+      expect(mockInsert).toHaveBeenCalledTimes(1);
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
   });
 });

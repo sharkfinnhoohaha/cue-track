@@ -1,28 +1,32 @@
 'use client';
 
 import React, { useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/cn';
 
 /**
  * Upload form — primary entry point for the Cue Track value prop.
  *
- * The full pipeline (file upload, server-side tempo + section detection,
- * generate spec, render cue track) is V1.5 work. This component ships the
- * UI surface so the landing page reflects the intended product, with a
- * "coming soon" handoff that points users to manual mode for now.
+ * Flow:
+ *   1. User drops or picks an MP3 / WAV (<= 50 MB)
+ *   2. Click "Analyze track" → POST file to /api/tracks/analyze
+ *   3. On success, navigate to /tracks/[id]/review so the user can adjust
+ *      the detected BPM + suggested sections before finalizing.
  *
- * Once the /api/tracks/analyze endpoint exists, swap the handleAnalyze
- * stub for a real POST + progress UI.
+ * The route persists a draft tracks row (status='rendering') with the
+ * worker's suggested SongSpec; the review screen then submits to
+ * /api/tracks/generate with existingTrackId to flip the row to ready.
  */
 
 const ACCEPTED_MIME = 'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave';
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
 
 export function UploadForm() {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasAnalyzed, setHasAnalyzed] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const acceptFile = useCallback((candidate: File | null) => {
@@ -64,15 +68,70 @@ export function UploadForm() {
     setIsDragging(false);
   }, []);
 
-  const handleAnalyze = useCallback(() => {
-    // Stubbed for V1.0. The backend /api/tracks/analyze endpoint and the
-    // Cloud Run worker analysis are tracked as the next-phase work.
-    setHasAnalyzed(true);
-  }, []);
+  const handleAnalyze = useCallback(async () => {
+    if (!file || isAnalyzing) return;
+    setIsAnalyzing(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/tracks/analyze', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        let body: { error?: string; code?: string; details?: string } = {};
+        try {
+          body = await res.json();
+        } catch {
+          // ignore body parse errors; fall through to status-based message
+        }
+        if (res.status === 429) {
+          throw new Error(
+            body.details ||
+              body.error ||
+              'Rate limit exceeded. Try again later.',
+          );
+        }
+        if (res.status === 422) {
+          throw new Error(
+            body.details ||
+              "We couldn't decode that file. Try a different MP3 or WAV.",
+          );
+        }
+        if (res.status === 402) {
+          // Phase C will land a richer paywall surface; for now expose the
+          // upgrade path inline.
+          throw new Error(
+            body.details ||
+              "You've used your free analysis. Upgrade at /pricing to continue.",
+          );
+        }
+        throw new Error(
+          body.error || `Analysis failed (${res.status})`,
+        );
+      }
+
+      const data = (await res.json()) as { id?: string };
+      if (!data.id) {
+        throw new Error('Analyze response did not include a track id');
+      }
+      router.push(`/tracks/${data.id}/review`);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Something went wrong. Please try again.',
+      );
+      setIsAnalyzing(false);
+    }
+  }, [file, isAnalyzing, router]);
 
   const reset = useCallback(() => {
     setFile(null);
-    setHasAnalyzed(false);
+    setIsAnalyzing(false);
     setError(null);
     if (inputRef.current) inputRef.current.value = '';
   }, []);
@@ -132,48 +191,44 @@ export function UploadForm() {
           </>
         )}
 
-        {file && !hasAnalyzed && (
+        {file && (
           <>
             <p className="text-[15px] font-medium text-[#1d1d1f] mb-1">{file.name}</p>
             <p className="text-[12px] text-[#6e6e73] mb-5">
               {(file.size / (1024 * 1024)).toFixed(1)} MB
             </p>
-            <div className="flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={handleAnalyze}
-                className="inline-flex items-center px-5 py-2.5 bg-[#1d1d1f] text-[#f5f5f7] text-[14px] font-semibold rounded-full hover:opacity-80 transition-opacity"
-              >
-                Analyze track
-              </button>
-              <button
-                type="button"
-                onClick={reset}
-                className="text-[13px] text-[#6e6e73] hover:text-[#1d1d1f]"
-              >
-                Choose different file
-              </button>
-            </div>
-          </>
-        )}
-
-        {hasAnalyzed && (
-          <>
-            <p className="text-[15px] font-semibold text-[#1d1d1f] mb-2">
-              Track analysis is coming soon.
-            </p>
-            <p className="text-[13px] text-[#6e6e73] mb-5 max-w-[420px] mx-auto leading-[1.55]">
-              Auto-detection of tempo and song structure is the next thing on the
-              roadmap. In the meantime, build your cue track manually below; it
-              takes about a minute if you know your BPM.
-            </p>
-            <button
-              type="button"
-              onClick={reset}
-              className="text-[13px] text-[#6e6e73] hover:text-[#1d1d1f] underline underline-offset-4"
-            >
-              Pick a different file
-            </button>
+            {isAnalyzing ? (
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex items-center gap-2 text-[14px] text-[#1d1d1f]">
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-3 w-3 rounded-full border-2 border-[#1d1d1f] border-t-transparent animate-spin"
+                  />
+                  Analyzing your track...
+                </div>
+                <p className="text-[12px] text-[#6e6e73] max-w-[360px]">
+                  This usually takes 5 to 15 seconds depending on the length
+                  of your file.
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleAnalyze}
+                  className="inline-flex items-center px-5 py-2.5 bg-[#1d1d1f] text-[#f5f5f7] text-[14px] font-semibold rounded-full hover:opacity-80 transition-opacity"
+                >
+                  Analyze track
+                </button>
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="text-[13px] text-[#6e6e73] hover:text-[#1d1d1f]"
+                >
+                  Choose different file
+                </button>
+              </div>
+            )}
           </>
         )}
 

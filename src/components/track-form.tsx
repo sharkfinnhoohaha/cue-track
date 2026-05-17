@@ -142,22 +142,61 @@ export interface TrackFormProps {
    * responses (anon users get a sign-up CTA; auth users get a wait time).
    */
   isAuthenticated: boolean;
+  /**
+   * Initial spec to render the form with. Used by the review screen at
+   * /tracks/[id]/review to pre-populate fields from the /analyze
+   * suggestion. When provided, the sessionStorage restore from the
+   * signup redirect path is skipped to avoid clobber.
+   */
+  initialSpec?: SongSpec;
+  /**
+   * If set, the form submits to /api/tracks/generate with
+   * `existingTrackId` in the body, which UPDATEs the draft row created
+   * by /api/tracks/analyze instead of INSERTing a fresh track. Pair
+   * with `initialSpec` from the review screen.
+   */
+  existingTrackId?: string;
 }
 
-export function TrackForm({ isAuthenticated }: TrackFormProps) {
+export function TrackForm({
+  isAuthenticated,
+  initialSpec,
+  existingTrackId,
+}: TrackFormProps) {
   const router = useRouter();
-  const [spec, setSpec] = useState<SongSpec>(DEFAULT_SPEC);
-  const [isCustomTs, setIsCustomTs] = useState(false);
+  const [spec, setSpec] = useState<SongSpec>(initialSpec ?? DEFAULT_SPEC);
+  const [isCustomTs, setIsCustomTs] = useState(() => {
+    // If the supplied initialSpec uses a non-canonical time signature,
+    // default the dropdown to "Custom" so the user sees the editable
+    // beats/subdivision controls rather than a stale value.
+    if (!initialSpec) return false;
+    const match = TIME_SIGNATURES.find(
+      (t) =>
+        t.ts.beats === initialSpec.timeSignature.beats &&
+        t.ts.subdivision === initialSpec.timeSignature.subdivision &&
+        t.value !== 'custom',
+    );
+    return !match;
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSignupPrompt, setShowSignupPrompt] = useState(false);
 
-  // Restore any pending spec stashed by the sign-up redirect path. When an
-  // anon user clicks "Sign up" in the modal, we serialize their in-progress
-  // spec to sessionStorage before redirecting to /auth/signin so they don't
-  // lose their work coming back through the magic-link flow.
+  // Restore any pending spec stashed by the sign-up redirect path. Skipped
+  // when initialSpec is supplied (review screen) so the analyzer's
+  // suggestion is not clobbered by an unrelated leftover draft.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (initialSpec) {
+      // Make sure we clear any stale pending spec from a previous session
+      // so it does not surface on a later /create visit.
+      try {
+        window.sessionStorage.removeItem(PENDING_SPEC_STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+      return;
+    }
     try {
       const pending = window.sessionStorage.getItem(PENDING_SPEC_STORAGE_KEY);
       if (pending) {
@@ -184,7 +223,7 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
         // ignore
       }
     }
-  }, []);
+  }, [initialSpec]);
 
   const update = useCallback(<K extends keyof SongSpec>(key: K, value: SongSpec[K]) => {
     setSpec((prev) => ({ ...prev, [key]: value }));
@@ -208,10 +247,13 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
     setIsSubmitting(true);
     setError(null);
     try {
+      const payload = existingTrackId
+        ? { ...spec, existingTrackId }
+        : spec;
       const res = await fetch('/api/tracks/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(spec),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -232,7 +274,7 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
       setIsSubmitting(false);
     }
-  }, [spec, router]);
+  }, [spec, router, existingTrackId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -354,7 +396,11 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
 
       <div className="flex flex-col items-center gap-3 pt-2">
         <Button type="submit" variant="primary" size="lg" loading={isSubmitting} disabled={isSubmitting || isOverDurationLimit} className="w-full sm:w-auto sm:min-w-[240px] glow-accent">
-          {isSubmitting ? 'Building...' : 'Make my cue track'}
+          {isSubmitting
+            ? 'Building...'
+            : existingTrackId
+            ? 'Finalize cue track'
+            : 'Make my cue track'}
         </Button>
         {spec.sections.length > 0 && (
           <p className={cn(

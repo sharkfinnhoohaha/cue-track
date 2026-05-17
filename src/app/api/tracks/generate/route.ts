@@ -8,6 +8,9 @@ import { checkAndRecordRateLimit, getClientIpHash } from '@/lib/rate-limit';
 import { getVoiceTier } from '@/lib/audio/types';
 import { eq } from 'drizzle-orm';
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const maxDuration = 60;
 export const runtime = 'nodejs';
 
@@ -168,8 +171,31 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Pull existingTrackId off the body before validation so it does not end
+  // up persisted into the spec jsonb. When present, the route UPDATEs the
+  // existing draft (created by /api/tracks/analyze) rather than INSERTing
+  // a new row.
+  let existingTrackId: string | undefined;
+  let specCandidate: unknown = body;
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    const { existingTrackId: rawId, ...rest } = body as Record<string, unknown>;
+    if (rawId !== undefined) {
+      if (typeof rawId !== 'string' || !UUID_REGEX.test(rawId)) {
+        return NextResponse.json(
+          {
+            error: 'Validation failed',
+            details: ['existingTrackId must be a UUID'],
+          },
+          { status: 400 },
+        );
+      }
+      existingTrackId = rawId;
+    }
+    specCandidate = rest;
+  }
+
   // --- Validate --------------------------------------------------------
-  const { spec, errors } = validateSpec(body);
+  const { spec, errors } = validateSpec(specCandidate);
   if (errors.length > 0) {
     return NextResponse.json(
       { error: 'Validation failed', details: errors },
@@ -282,7 +308,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const trackId = crypto.randomUUID();
+  const trackId = existingTrackId ?? crypto.randomUUID();
 
   try {
     // --- Compute duration from the grid (no audio render) -------------
@@ -318,24 +344,88 @@ export async function POST(request: NextRequest) {
     const fullUrl = `/api/tracks/${trackId}/download`;
 
     const { db, tracks } = await import('@/lib/db');
-    const rows = await db
-      .insert(tracks)
-      .values({
-        id: trackId,
-        title: spec.title,
-        spec,
-        status: 'ready',
-        previewUrl,
-        fullUrl,
-        duration: durationSec,
-        userId: userId ?? undefined,
-      })
-      .returning({
-        id: tracks.id,
-        previewUrl: tracks.previewUrl,
-        status: tracks.status,
-        duration: tracks.duration,
-      });
+
+    let rows: Array<{
+      id: string;
+      previewUrl: string | null;
+      status: string;
+      duration: number | null;
+    }>;
+
+    if (existingTrackId) {
+      // Finalize a draft created by /api/tracks/analyze. For authenticated
+      // callers, verify that either the draft has no owner (anon upload) or
+      // the owner matches the current session, so users cannot finalize
+      // someone else's draft by guessing UUIDs. Anonymous callers rely on
+      // UUID-as-bearer (the URL is the secret).
+      if (userId) {
+        const owners = await db
+          .select({ userId: tracks.userId })
+          .from(tracks)
+          .where(eq(tracks.id, existingTrackId))
+          .limit(1);
+        const ownerRow = owners[0];
+        if (!ownerRow) {
+          return NextResponse.json(
+            { error: 'Track not found', details: `No track with id ${existingTrackId}` },
+            { status: 404 },
+          );
+        }
+        if (ownerRow.userId !== null && ownerRow.userId !== userId) {
+          return NextResponse.json(
+            { error: 'Forbidden', details: 'Track belongs to another user' },
+            { status: 403 },
+          );
+        }
+      }
+
+      rows = await db
+        .update(tracks)
+        .set({
+          title: spec.title,
+          spec,
+          status: 'ready',
+          previewUrl,
+          fullUrl,
+          duration: durationSec,
+          // Attribute the row to the finalizing user if they have signed in
+          // since the draft was created. Anon drafts keep userId null.
+          ...(userId ? { userId } : {}),
+        })
+        .where(eq(tracks.id, existingTrackId))
+        .returning({
+          id: tracks.id,
+          previewUrl: tracks.previewUrl,
+          status: tracks.status,
+          duration: tracks.duration,
+        });
+
+      if (rows.length === 0) {
+        return NextResponse.json(
+          { error: 'Track not found', details: `No track with id ${existingTrackId}` },
+          { status: 404 },
+        );
+      }
+    } else {
+      rows = await db
+        .insert(tracks)
+        .values({
+          id: trackId,
+          title: spec.title,
+          spec,
+          status: 'ready',
+          previewUrl,
+          fullUrl,
+          duration: durationSec,
+          userId: userId ?? undefined,
+        })
+        .returning({
+          id: tracks.id,
+          previewUrl: tracks.previewUrl,
+          status: tracks.status,
+          duration: tracks.duration,
+        });
+    }
 
     const saved = rows[0];
     if (!saved) {
