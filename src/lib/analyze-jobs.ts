@@ -34,6 +34,7 @@ interface RunArgs {
   userId: string | null;
   workerUrl: string;
   workerSecret: string;
+  workerPath: string;
 }
 
 interface WorkerAnalyzeResponse {
@@ -44,17 +45,6 @@ interface WorkerAnalyzeResponse {
 }
 
 const WORKER_TIMEOUT_MS = 90_000;
-
-function workerPathForMethod(method: AnalyzeMethod): string {
-  switch (method) {
-    case 'template':
-      return '/analyze';
-    case 'foote':
-      return '/analyze/foote';
-    case 'ml':
-      return '/analyze';
-  }
-}
 
 function buildSpec(title: string, worker: WorkerAnalyzeResponse): SongSpec {
   return {
@@ -75,7 +65,7 @@ function buildSpec(title: string, worker: WorkerAnalyzeResponse): SongSpec {
 async function callWorker(
   args: RunArgs,
 ): Promise<WorkerAnalyzeResponse> {
-  const path = workerPathForMethod(args.method);
+  const path = args.workerPath;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), WORKER_TIMEOUT_MS);
   let resp: Response;

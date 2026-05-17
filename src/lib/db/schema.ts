@@ -284,6 +284,58 @@ export const analyzeJobs = pgTable(
   }),
 );
 
+// --- A/B detector measurement (Phase D PR-D) ---
+
+/**
+ * One row per finalized track: captures the detector's suggestion at
+ * INSERT time (snapshot) and the user's finalized spec at UPDATE time
+ * (final_sections), with computed deltas. The /generate UPDATE path
+ * writes here best-effort; failure to record an outcome does not fail
+ * the user's finalization request.
+ *
+ * Score query (after ~100 finalized tracks per method):
+ *
+ *   SELECT method,
+ *          count(*) AS n,
+ *          avg(total_bars_delta) AS avg_bar_delta,
+ *          percentile_cont(0.5) WITHIN GROUP (ORDER BY total_bars_delta) AS median_bar_delta,
+ *          avg(num_sections_delta) AS avg_section_delta
+ *   FROM analyze_outcomes
+ *   GROUP BY method
+ *   ORDER BY avg_bar_delta ASC;
+ *
+ * Lower deltas = better detector. Promote the winner by setting
+ * ANALYZE_AB_SPLIT_PERCENT to 100 (ML) or 0 (Foote); loser stays in
+ * code as fallback.
+ */
+export const analyzeOutcomes = pgTable(
+  'analyze_outcomes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    trackId: uuid('track_id')
+      .notNull()
+      .references(() => tracks.id, { onDelete: 'cascade' }),
+    jobId: uuid('job_id').references(() => analyzeJobs.id, {
+      onDelete: 'set null',
+    }),
+    method: analyzeMethodEnum('method').notNull(),
+    snapshot: jsonb('snapshot').notNull(),
+    finalSections: jsonb('final_sections').notNull(),
+    numSectionsDelta: integer('num_sections_delta').notNull(),
+    totalBarsDelta: integer('total_bars_delta').notNull(),
+    nameEditCount: integer('name_edit_count').notNull(),
+    computedAt: timestamp('computed_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    methodComputedAtIdx: index('analyze_outcomes_method_computed_at_idx').on(
+      table.method,
+      table.computedAt,
+    ),
+  }),
+);
+
 // --- Inferred types ---
 
 export type Track = typeof tracks.$inferSelect;
@@ -309,6 +361,9 @@ export type NewVerificationToken = typeof verificationTokens.$inferInsert;
 
 export type AnalyzeJob = typeof analyzeJobs.$inferSelect;
 export type NewAnalyzeJob = typeof analyzeJobs.$inferInsert;
+
+export type AnalyzeOutcome = typeof analyzeOutcomes.$inferSelect;
+export type NewAnalyzeOutcome = typeof analyzeOutcomes.$inferInsert;
 
 export type RateLimit = typeof rateLimits.$inferSelect;
 export type NewRateLimit = typeof rateLimits.$inferInsert;

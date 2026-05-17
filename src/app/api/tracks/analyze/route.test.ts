@@ -119,7 +119,9 @@ describe('POST /api/tracks/analyze (async)', () => {
     expect(mockRunAnalyzeJob).toHaveBeenCalledTimes(1);
     const runArgs = mockRunAnalyzeJob.mock.calls[0]?.[0];
     expect(runArgs?.jobId).toBe('job-abc-123');
-    expect(runArgs?.method).toBe('template');
+    // Router defaults to 'foote' when ML_WORKER_URL is unset (PR-D)
+    expect(runArgs?.method).toBe('foote');
+    expect(runArgs?.workerPath).toBe('/analyze/foote');
     expect(runArgs?.mime).toBe('audio/wav');
     expect(runArgs?.identifier).toMatch(/^ip:/);
   });
