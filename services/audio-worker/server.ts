@@ -21,6 +21,10 @@ import {
   isSupportedMime,
   type AnalyzeResult,
 } from './lib/audio/analyze.ts';
+import {
+  footeAnalyze,
+  type FooteResult,
+} from './lib/audio/foote-analyze.ts';
 
 const PORT = Number(process.env.PORT) || 8080;
 const SHARED_SECRET = process.env.WORKER_SHARED_SECRET;
@@ -313,6 +317,63 @@ async function handleAnalyze(req: IncomingMessage, res: ServerResponse): Promise
   return jsonResponse(res, 200, result);
 }
 
+async function handleAnalyzeFoote(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!authorized(req)) {
+    return jsonResponse(res, 401, { error: 'unauthorized' });
+  }
+
+  const contentTypeHeader = req.headers['content-type'];
+  const mime =
+    typeof contentTypeHeader === 'string'
+      ? contentTypeHeader
+      : Array.isArray(contentTypeHeader)
+      ? contentTypeHeader[0]
+      : '';
+  const kind = isSupportedMime(mime);
+  if (!kind) {
+    return jsonResponse(res, 415, {
+      error: 'unsupported_media_type',
+      detail: `Expected audio/mpeg or audio/wav, got: ${mime || '(none)'}`,
+    });
+  }
+
+  let body: Buffer;
+  try {
+    body = await readRawBody(req);
+  } catch (err) {
+    return jsonResponse(res, 413, {
+      error: 'payload_too_large',
+      detail: (err as Error).message,
+    });
+  }
+
+  if (body.length === 0) {
+    return jsonResponse(res, 400, { error: 'empty_body' });
+  }
+
+  const startTime = Date.now();
+  let result: FooteResult;
+  try {
+    result = await footeAnalyze(body, mime);
+  } catch (err) {
+    console.error('[audio-worker] Foote analyze failed:', err);
+    return jsonResponse(res, 422, {
+      error: 'decode_failed',
+      detail: (err as Error).message,
+    });
+  }
+
+  const elapsedMs = Date.now() - startTime;
+  console.log(
+    `[audio-worker] Foote-analyzed ${body.length} bytes (${kind}) in ${elapsedMs}ms: ` +
+    `bpm=${result.bpm}, duration=${result.duration.toFixed(1)}s, ` +
+    `sections=${result.suggestedSections.length}, frames=${result.diagnostics.numFrames}, ` +
+    `peaks=${result.diagnostics.numPeaks}`,
+  );
+
+  return jsonResponse(res, 200, result);
+}
+
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
   jsonResponse(res, 200, {
     status: 'ok',
@@ -352,6 +413,9 @@ const server = createServer(async (req, res) => {
     if (method === 'POST' && url === '/analyze') {
       return await handleAnalyze(req, res);
     }
+    if (method === 'POST' && url === '/analyze/foote') {
+      return await handleAnalyzeFoote(req, res);
+    }
     return jsonResponse(res, 404, { error: 'not_found', path: url });
   } catch (err) {
     console.error('[audio-worker] Unhandled error:', err);
@@ -362,7 +426,7 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`[audio-worker] Listening on port ${PORT}`);
   console.log(
-    `[audio-worker] Endpoints: POST /render, POST /render-to-gcs, POST /analyze, GET /health`,
+    `[audio-worker] Endpoints: POST /render, POST /render-to-gcs, POST /analyze, POST /analyze/foote, GET /health`,
   );
   console.log(`[audio-worker] GCS bucket: ${GCS_BUCKET ?? '(not configured)'}`);
 });

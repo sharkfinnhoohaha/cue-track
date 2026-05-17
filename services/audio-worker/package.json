@@ -9,7 +9,9 @@
     "dev": "node --watch --experimental-strip-types server.ts",
     "test": "node --experimental-strip-types test/smoke.ts",
     "test:analyze": "node --experimental-strip-types test/smoke-analyze.ts",
-    "test:all": "npm test && npm run test:analyze"
+    "test:foote": "node --experimental-strip-types test/smoke-foote.ts",
+    "test:all": "npm test && npm run test:analyze && npm run test:foote",
+    "score:detectors": "node --experimental-strip-types test/score-detectors.ts"
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^5.5.0",
