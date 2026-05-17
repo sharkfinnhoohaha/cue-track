@@ -72,6 +72,47 @@ function useTapTempo(onBpmChange: (bpm: number) => void) {
   return tap;
 }
 
+/**
+ * Estimate a track's duration in seconds from the spec alone, without
+ * building the full TimeGrid. Used for the inline UI warning so users see
+ * the duration cap before they submit. The server enforces the same cap
+ * authoritatively in /api/tracks/generate using buildTimeGrid().totalDuration.
+ *
+ * Counts count-in pre-roll plus each section's bar-time at its effective
+ * BPM. Cue audio (TTS, click) mixes into the grid rather than extending it,
+ * so this estimator matches the server's totalDuration within a beat.
+ */
+function estimateDurationSeconds(spec: SongSpec): number {
+  const baseBpm = spec.bpm;
+  const beats = spec.timeSignature.beats;
+  if (!Number.isFinite(baseBpm) || baseBpm <= 0) return 0;
+  if (!Number.isFinite(beats) || beats <= 0) return 0;
+
+  let totalSeconds = 0;
+  if (spec.enableCountIn && spec.countInBars > 0) {
+    totalSeconds += spec.countInBars * beats * (60 / baseBpm);
+  }
+  for (const section of spec.sections) {
+    const bpm =
+      section.bpmOverride && section.bpmOverride > 0
+        ? section.bpmOverride
+        : baseBpm;
+    totalSeconds += section.bars * beats * (60 / bpm);
+  }
+  return totalSeconds;
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${secs}s`;
+}
+
+const MAX_DURATION_SECONDS = Number(
+  process.env.NEXT_PUBLIC_MAX_TRACK_DURATION_SECONDS || 1800,
+);
+
 const DEFAULT_SPEC: SongSpec = {
   title: '',
   bpm: 120,
@@ -106,12 +147,23 @@ export function TrackForm() {
     if (found) update('timeSignature', found.ts);
   }, [update]);
 
+  const estimatedDurationSec = estimateDurationSeconds(spec);
+  const isOverDurationLimit = estimatedDurationSec > MAX_DURATION_SECONDS;
+  const isNearDurationLimit =
+    !isOverDurationLimit && estimatedDurationSec > MAX_DURATION_SECONDS * 0.9;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!spec.title.trim()) { setError('Please enter a track title.'); return; }
     if (spec.sections.length === 0) { setError('Please add at least one section.'); return; }
     if (spec.bpm < 30 || spec.bpm > 300) { setError('BPM must be between 30 and 300.'); return; }
+    if (isOverDurationLimit) {
+      setError(
+        `Track is approximately ${formatDuration(estimatedDurationSec)}, which exceeds the ${formatDuration(MAX_DURATION_SECONDS)} maximum. Reduce bars or sections.`,
+      );
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -218,12 +270,25 @@ export function TrackForm() {
       </Card>
 
       <div className="flex flex-col items-center gap-3 pt-2">
-        <Button type="submit" variant="primary" size="lg" loading={isSubmitting} disabled={isSubmitting} className="w-full sm:w-auto sm:min-w-[240px] glow-accent">
+        <Button type="submit" variant="primary" size="lg" loading={isSubmitting} disabled={isSubmitting || isOverDurationLimit} className="w-full sm:w-auto sm:min-w-[240px] glow-accent">
           {isSubmitting ? 'Generating...' : 'Generate Track'}
         </Button>
         {spec.sections.length > 0 && (
-          <p className="text-xs text-muted font-mono">
-            {spec.sections.reduce((sum, s) => sum + s.bars, 0)} bars across {spec.sections.length} section{spec.sections.length !== 1 ? 's' : ''}
+          <p className={cn(
+            'text-xs font-mono',
+            isOverDurationLimit ? 'text-red-400' : isNearDurationLimit ? 'text-yellow-400' : 'text-muted',
+          )}>
+            {spec.sections.reduce((sum, s) => sum + s.bars, 0)} bars across {spec.sections.length} section{spec.sections.length !== 1 ? 's' : ''} (≈ {formatDuration(estimatedDurationSec)})
+          </p>
+        )}
+        {spec.sections.length > 0 && isOverDurationLimit && (
+          <p className="text-xs text-red-400 font-mono text-center">
+            Exceeds {formatDuration(MAX_DURATION_SECONDS)} maximum. Reduce bars or sections to generate.
+          </p>
+        )}
+        {spec.sections.length > 0 && isNearDurationLimit && (
+          <p className="text-xs text-yellow-400 font-mono text-center">
+            Approaching {formatDuration(MAX_DURATION_SECONDS)} maximum.
           </p>
         )}
       </div>
