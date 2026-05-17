@@ -7,13 +7,18 @@
   "scripts": {
     "start": "node --experimental-strip-types server.ts",
     "dev": "node --watch --experimental-strip-types server.ts",
-    "test": "node --experimental-strip-types test/smoke.ts"
+    "test": "node --experimental-strip-types test/smoke.ts",
+    "test:analyze": "node --experimental-strip-types test/smoke-analyze.ts",
+    "test:all": "npm test && npm run test:analyze"
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^5.5.0",
     "@google-cloud/storage": "^7.14.0",
     "@neondatabase/serverless": "^0.10.4",
-    "lamejs": "^1.2.1"
+    "lamejs": "^1.2.1",
+    "mpg123-decoder": "^1.0.3",
+    "music-tempo": "^1.0.3",
+    "wavefile": "^11.0.0"
   },
   "engines": {
     "node": ">=22.0.0"

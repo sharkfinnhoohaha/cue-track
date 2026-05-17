@@ -16,6 +16,11 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { renderTrack } from './lib/audio/engine.ts';
 import type { SongSpec } from './lib/audio/types.ts';
+import {
+  analyzeAudio,
+  isSupportedMime,
+  type AnalyzeResult,
+} from './lib/audio/analyze.ts';
 
 const PORT = Number(process.env.PORT) || 8080;
 const SHARED_SECRET = process.env.WORKER_SHARED_SECRET;
@@ -74,6 +79,27 @@ async function readJsonBody<T>(req: IncomingMessage, maxBytes = 1_000_000): Prom
         reject(err);
       }
     });
+    req.on('error', reject);
+  });
+}
+
+async function readRawBody(
+  req: IncomingMessage,
+  maxBytes = 52 * 1024 * 1024,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    req.on('data', (chunk: Buffer) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        reject(new Error(`Request body exceeds ${maxBytes} bytes`));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -231,6 +257,62 @@ async function handleRenderToGcs(req: IncomingMessage, res: ServerResponse): Pro
   }
 }
 
+async function handleAnalyze(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!authorized(req)) {
+    return jsonResponse(res, 401, { error: 'unauthorized' });
+  }
+
+  const contentTypeHeader = req.headers['content-type'];
+  const mime =
+    typeof contentTypeHeader === 'string'
+      ? contentTypeHeader
+      : Array.isArray(contentTypeHeader)
+      ? contentTypeHeader[0]
+      : '';
+  const kind = isSupportedMime(mime);
+  if (!kind) {
+    return jsonResponse(res, 415, {
+      error: 'unsupported_media_type',
+      detail: `Expected audio/mpeg or audio/wav, got: ${mime || '(none)'}`,
+    });
+  }
+
+  let body: Buffer;
+  try {
+    body = await readRawBody(req);
+  } catch (err) {
+    return jsonResponse(res, 413, {
+      error: 'payload_too_large',
+      detail: (err as Error).message,
+    });
+  }
+
+  if (body.length === 0) {
+    return jsonResponse(res, 400, { error: 'empty_body' });
+  }
+
+  const startTime = Date.now();
+  let result: AnalyzeResult;
+  try {
+    result = await analyzeAudio(body, mime);
+  } catch (err) {
+    console.error('[audio-worker] Analyze failed:', err);
+    return jsonResponse(res, 422, {
+      error: 'decode_failed',
+      detail: (err as Error).message,
+    });
+  }
+
+  const elapsedMs = Date.now() - startTime;
+  console.log(
+    `[audio-worker] Analyzed ${body.length} bytes (${kind}) in ${elapsedMs}ms: ` +
+    `bpm=${result.bpm}, duration=${result.duration.toFixed(1)}s, ` +
+    `sections=${result.suggestedSections.length}`,
+  );
+
+  return jsonResponse(res, 200, result);
+}
+
 function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
   jsonResponse(res, 200, {
     status: 'ok',
@@ -267,6 +349,9 @@ const server = createServer(async (req, res) => {
     if (method === 'POST' && url === '/render-to-gcs') {
       return await handleRenderToGcs(req, res);
     }
+    if (method === 'POST' && url === '/analyze') {
+      return await handleAnalyze(req, res);
+    }
     return jsonResponse(res, 404, { error: 'not_found', path: url });
   } catch (err) {
     console.error('[audio-worker] Unhandled error:', err);
@@ -276,7 +361,9 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`[audio-worker] Listening on port ${PORT}`);
-  console.log(`[audio-worker] Endpoints: POST /render, POST /render-to-gcs, GET /health`);
+  console.log(
+    `[audio-worker] Endpoints: POST /render, POST /render-to-gcs, POST /analyze, GET /health`,
+  );
   console.log(`[audio-worker] GCS bucket: ${GCS_BUCKET ?? '(not configured)'}`);
 });
 
