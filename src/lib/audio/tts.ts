@@ -1,25 +1,138 @@
 /**
  * Text-to-Speech integration for Cue Track.
  * Two modes: Google Cloud TTS (production) and fallback tone synthesis (testing).
+ *
+ * Caching is two-tier:
+ * 1. In-process Map keyed by "voiceId:text" (hot path, evaporates on cold start)
+ * 2. Postgres tts_cache table keyed by "voiceId:sha256(text)" (warm cross
+ *    cold-start; see scripts/migrations/2026-05-17b_add_tts_cache.sql)
+ *
+ * On a miss in tier 1, we consult tier 2 before paying for a live TTS call.
+ * On a miss in both, we synthesize, then populate both tiers. Tier 2 writes
+ * are best-effort: DB errors are logged and swallowed so the synthesis path
+ * never fails on a cache write.
  */
 
 import type { VoiceId } from './types';
+import { createHash } from 'node:crypto';
 
-// In-memory cache: keyed by "voiceId:text"
 const ttsCache = new Map<string, Float32Array>();
 
 /**
- * Clear the TTS cache. Useful for testing or memory management.
+ * Clear the in-process TTS cache. Useful for testing or memory management.
+ * Does not clear the Postgres tts_cache table.
  */
 export function clearTtsCache(): void {
   ttsCache.clear();
 }
 
 /**
- * Get the current cache size (for diagnostics).
+ * Get the current in-process cache size (for diagnostics).
  */
 export function getTtsCacheSize(): number {
   return ttsCache.size;
+}
+
+/**
+ * Derive the Postgres tts_cache row key. We hash the text so the key is
+ * fixed-width and the table never stores raw cue strings alongside the
+ * audio bytes. The in-process Map uses raw text since it never persists
+ * outside the function instance.
+ */
+function ttsCacheDbKey(text: string, voiceId: string): string {
+  const hash = createHash('sha256').update(text).digest('hex');
+  return `${voiceId}:${hash}`;
+}
+
+/**
+ * Decode a bytea value as returned by the Neon HTTP driver. Newer driver
+ * versions hand back Buffer/Uint8Array directly; older or edge runtime
+ * versions hand back the Postgres wire-format hex string `\x<hex>`.
+ */
+function decodeBytea(value: unknown): Buffer {
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof Uint8Array) return Buffer.from(value);
+  if (typeof value === 'string' && value.startsWith('\\x')) {
+    return Buffer.from(value.slice(2), 'hex');
+  }
+  throw new Error(`tts_cache: unexpected bytea format (type=${typeof value})`);
+}
+
+/**
+ * Copy a Buffer into a fresh ArrayBuffer-backed Float32Array. The copy is
+ * required because the source Buffer may not be 4-byte aligned (slab
+ * allocator behavior in Node), and Float32Array requires aligned input.
+ */
+function bufferToFloat32(buf: Buffer): Float32Array {
+  if (buf.byteLength % 4 !== 0) {
+    throw new Error(
+      `tts_cache: audio byte length ${buf.byteLength} is not a multiple of 4`,
+    );
+  }
+  const ab = new ArrayBuffer(buf.byteLength);
+  new Uint8Array(ab).set(buf);
+  return new Float32Array(ab);
+}
+
+/**
+ * Zero-copy view of a Float32Array as a Buffer suitable for bytea insert.
+ */
+function float32ToBuffer(arr: Float32Array): Buffer {
+  return Buffer.from(arr.buffer, arr.byteOffset, arr.byteLength);
+}
+
+/**
+ * Read a cached row from the Postgres tts_cache table. Returns null on any
+ * failure path (missing DATABASE_URL, table not migrated, transport error,
+ * key miss) so the caller can fall through to live synthesis without
+ * branching on the failure mode.
+ */
+async function getDbCachedTts(
+  dbKey: string,
+): Promise<Float32Array | null> {
+  if (!process.env.DATABASE_URL) return null;
+  try {
+    const { neon } = await import('@neondatabase/serverless');
+    const sql = neon(process.env.DATABASE_URL);
+    const rows = (await sql`
+      SELECT audio FROM tts_cache WHERE cache_key = ${dbKey} LIMIT 1
+    `) as Array<{ audio: unknown }>;
+    if (rows.length === 0) return null;
+    return bufferToFloat32(decodeBytea(rows[0].audio));
+  } catch (err) {
+    console.warn(
+      `[tts-cache] db read failed for key ${dbKey.slice(0, 24)}...; falling through. ${(err as Error).message}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Best-effort insert into the Postgres tts_cache table. ON CONFLICT DO
+ * NOTHING handles the race where two concurrent cold-start invocations
+ * synthesize the same cue and both try to write. Errors are logged and
+ * swallowed; the in-process cache still holds the value for this instance.
+ */
+async function setDbCachedTts(
+  dbKey: string,
+  sampleRate: number,
+  audio: Float32Array,
+): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const { neon } = await import('@neondatabase/serverless');
+    const sql = neon(process.env.DATABASE_URL);
+    const bytes = float32ToBuffer(audio);
+    await sql`
+      INSERT INTO tts_cache (cache_key, audio, sample_rate)
+      VALUES (${dbKey}, ${bytes}, ${sampleRate})
+      ON CONFLICT (cache_key) DO NOTHING
+    `;
+  } catch (err) {
+    console.warn(
+      `[tts-cache] db write failed for key ${dbKey.slice(0, 24)}...; in-process cache still warm. ${(err as Error).message}`,
+    );
+  }
 }
 
 /**
@@ -66,11 +179,18 @@ export async function synthesizeSpeech(
   text: string,
   voiceId: string
 ): Promise<Float32Array> {
-  const cacheKey = `${voiceId}:${text}`;
+  const memKey = `${voiceId}:${text}`;
 
-  const cached = ttsCache.get(cacheKey);
-  if (cached) {
-    return cached;
+  const memCached = ttsCache.get(memKey);
+  if (memCached) {
+    return memCached;
+  }
+
+  const dbKey = ttsCacheDbKey(text, voiceId);
+  const dbCached = await getDbCachedTts(dbKey);
+  if (dbCached) {
+    ttsCache.set(memKey, dbCached);
+    return dbCached;
   }
 
   let result: Float32Array;
@@ -88,7 +208,11 @@ export async function synthesizeSpeech(
     result = synthesizeFallback(text);
   }
 
-  ttsCache.set(cacheKey, result);
+  ttsCache.set(memKey, result);
+  // Awaited so the Vercel function does not terminate before the write
+  // commits; the few hundred ms cost is acceptable on the cache-miss path
+  // since we just paid for a live TTS call anyway.
+  await setDbCachedTts(dbKey, 44100, result);
   return result;
 }
 

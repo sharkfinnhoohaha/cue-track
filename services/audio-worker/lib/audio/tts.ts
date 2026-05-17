@@ -1,25 +1,105 @@
 /**
  * Text-to-Speech integration for Cue Track.
  * Two modes: Google Cloud TTS (production) and fallback tone synthesis (testing).
+ *
+ * Caching is two-tier (mirrors src/lib/audio/tts.ts in the Next.js app):
+ * 1. In-process Map keyed by "voiceId:text" (evaporates on Cloud Run scale-down)
+ * 2. Postgres tts_cache table keyed by "voiceId:sha256(text)" (warm across
+ *    instance restarts; see scripts/migrations/2026-05-17b_add_tts_cache.sql)
+ *
+ * The worker reads DATABASE_URL from env. If unset, tier 2 is skipped and
+ * the worker behaves exactly as before (Map-only). DB errors fail soft.
  */
 
 import type { VoiceId } from './types.ts';
+import { createHash } from 'node:crypto';
 
-// In-memory cache: keyed by "voiceId:text"
 const ttsCache = new Map<string, Float32Array>();
 
 /**
- * Clear the TTS cache. Useful for testing or memory management.
+ * Clear the in-process TTS cache. Useful for testing or memory management.
+ * Does not clear the Postgres tts_cache table.
  */
 export function clearTtsCache(): void {
   ttsCache.clear();
 }
 
 /**
- * Get the current cache size (for diagnostics).
+ * Get the current in-process cache size (for diagnostics).
  */
 export function getTtsCacheSize(): number {
   return ttsCache.size;
+}
+
+function ttsCacheDbKey(text: string, voiceId: string): string {
+  const hash = createHash('sha256').update(text).digest('hex');
+  return `${voiceId}:${hash}`;
+}
+
+function decodeBytea(value: unknown): Buffer {
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof Uint8Array) return Buffer.from(value);
+  if (typeof value === 'string' && value.startsWith('\\x')) {
+    return Buffer.from(value.slice(2), 'hex');
+  }
+  throw new Error(`tts_cache: unexpected bytea format (type=${typeof value})`);
+}
+
+function bufferToFloat32(buf: Buffer): Float32Array {
+  if (buf.byteLength % 4 !== 0) {
+    throw new Error(
+      `tts_cache: audio byte length ${buf.byteLength} is not a multiple of 4`,
+    );
+  }
+  const ab = new ArrayBuffer(buf.byteLength);
+  new Uint8Array(ab).set(buf);
+  return new Float32Array(ab);
+}
+
+function float32ToBuffer(arr: Float32Array): Buffer {
+  return Buffer.from(arr.buffer, arr.byteOffset, arr.byteLength);
+}
+
+async function getDbCachedTts(
+  dbKey: string,
+): Promise<Float32Array | null> {
+  if (!process.env.DATABASE_URL) return null;
+  try {
+    const { neon } = await import('@neondatabase/serverless');
+    const sql = neon(process.env.DATABASE_URL);
+    const rows = (await sql`
+      SELECT audio FROM tts_cache WHERE cache_key = ${dbKey} LIMIT 1
+    `) as Array<{ audio: unknown }>;
+    if (rows.length === 0) return null;
+    return bufferToFloat32(decodeBytea(rows[0].audio));
+  } catch (err) {
+    console.warn(
+      `[tts-cache] db read failed for key ${dbKey.slice(0, 24)}...; falling through. ${(err as Error).message}`,
+    );
+    return null;
+  }
+}
+
+async function setDbCachedTts(
+  dbKey: string,
+  sampleRate: number,
+  audio: Float32Array,
+): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const { neon } = await import('@neondatabase/serverless');
+    const sql = neon(process.env.DATABASE_URL);
+    const bytes = float32ToBuffer(audio);
+    await sql`
+      INSERT INTO tts_cache (cache_key, audio, sample_rate)
+      VALUES (${dbKey}, ${bytes}, ${sampleRate})
+      ON CONFLICT (cache_key) DO NOTHING
+    `;
+  } catch (err) {
+    console.warn(
+      `[tts-cache] db write failed for key ${dbKey.slice(0, 24)}...; in-process cache still warm. ${(err as Error).message}`,
+    );
+  }
 }
 
 /**
@@ -67,11 +147,18 @@ export async function synthesizeSpeech(
   text: string,
   voiceId: string
 ): Promise<Float32Array> {
-  const cacheKey = `${voiceId}:${text}`;
+  const memKey = `${voiceId}:${text}`;
 
-  const cached = ttsCache.get(cacheKey);
-  if (cached) {
-    return cached;
+  const memCached = ttsCache.get(memKey);
+  if (memCached) {
+    return memCached;
+  }
+
+  const dbKey = ttsCacheDbKey(text, voiceId);
+  const dbCached = await getDbCachedTts(dbKey);
+  if (dbCached) {
+    ttsCache.set(memKey, dbCached);
+    return dbCached;
   }
 
   let result: Float32Array;
@@ -89,7 +176,8 @@ export async function synthesizeSpeech(
     result = synthesizeFallback(text);
   }
 
-  ttsCache.set(cacheKey, result);
+  ttsCache.set(memKey, result);
+  await setDbCachedTts(dbKey, 44100, result);
   return result;
 }
 
