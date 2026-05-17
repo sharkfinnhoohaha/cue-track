@@ -10,6 +10,12 @@
       "maxDuration": 30
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/cleanup-rate-limits",
+      "schedule": "0 3 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/api/demo-preview",
