@@ -128,12 +128,12 @@ describe('checkAndRecordRateLimit', () => {
     expect(mockInsert).toHaveBeenCalledTimes(1);
   });
 
-  it('returns the auth default limit (50) when env var is unset', async () => {
+  it('returns the auth default limit (200) when env var is unset', async () => {
     delete process.env.GENERATE_RATE_LIMIT_AUTH_PER_HOUR;
     mockSelectChain.mockResolvedValue([]);
     mockInsert.mockResolvedValue(undefined);
     const result = await checkAndRecordRateLimit('user:abc', 'auth');
-    expect(result.limit).toBe(50);
+    expect(result.limit).toBe(200);
   });
 
   it('returns the anon default limit (5) when env var is unset', async () => {

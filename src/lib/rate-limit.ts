@@ -55,7 +55,13 @@ function getLimitFor(kind: RateLimitKind): number {
     kind === 'auth'
       ? process.env.GENERATE_RATE_LIMIT_AUTH_PER_HOUR
       : process.env.GENERATE_RATE_LIMIT_ANON_PER_HOUR;
-  const defaultLimit = kind === 'auth' ? 50 : 5;
+  // Auth users get a "generous" cap per the V1 funnel: manual mode is the
+  // consolation prize for signing up without paying, so the limit should
+  // rarely bite. 200/hr = ~3 generations/minute sustained. Anon stays at 5
+  // (gen route also rejects anon at the voice-tier gate before this fires
+  // for Studio voices). Override via the GENERATE_RATE_LIMIT_*_PER_HOUR
+  // env vars on Vercel.
+  const defaultLimit = kind === 'auth' ? 200 : 5;
   const parsed = raw ? Number(raw) : defaultLimit;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultLimit;
 }
