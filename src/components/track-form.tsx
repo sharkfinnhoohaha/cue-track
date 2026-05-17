@@ -11,7 +11,6 @@ import { Card } from '@/components/ui/card';
 import { SectionList } from '@/components/section-list';
 import { cn } from '@/lib/cn';
 
-const SKIP_SIGNUP_STORAGE_KEY = 'cuetrack:skip-signup-prompt';
 const PENDING_SPEC_STORAGE_KEY = 'cuetrack:pending-spec';
 
 const TIME_SIGNATURES: { value: string; label: string; ts: TimeSignature }[] = [
@@ -152,26 +151,13 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSignupPrompt, setShowSignupPrompt] = useState(false);
-  const [hasSkippedSignup, setHasSkippedSignup] = useState(false);
 
-  // Restore "skipped this session" flag from sessionStorage on mount so
-  // anonymous users who already dismissed the modal once aren't re-prompted
-  // every submit. SessionStorage (not local) so the prompt comes back next
-  // browser session, when their rate-limit window has likely reset anyway.
-  //
-  // Also restore any pending spec stashed by the sign-up redirect path. When
-  // an anon user clicks "Sign up" in the modal, we serialize their
-  // in-progress spec to sessionStorage before redirecting to /auth/signin so
-  // they don't lose their work coming back through the magic-link flow.
+  // Restore any pending spec stashed by the sign-up redirect path. When an
+  // anon user clicks "Sign up" in the modal, we serialize their in-progress
+  // spec to sessionStorage before redirecting to /auth/signin so they don't
+  // lose their work coming back through the magic-link flow.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    try {
-      if (window.sessionStorage.getItem(SKIP_SIGNUP_STORAGE_KEY) === 'true') {
-        setHasSkippedSignup(true);
-      }
-    } catch {
-      // sessionStorage may be unavailable (private mode, quota); ignore.
-    }
     try {
       const pending = window.sessionStorage.getItem(PENDING_SPEC_STORAGE_KEY);
       if (pending) {
@@ -197,15 +183,6 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
       } catch {
         // ignore
       }
-    }
-  }, []);
-
-  const skipSignupPrompt = useCallback(() => {
-    setHasSkippedSignup(true);
-    try {
-      window.sessionStorage.setItem(SKIP_SIGNUP_STORAGE_KEY, 'true');
-    } catch {
-      // ignore
     }
   }, []);
 
@@ -270,10 +247,12 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
       return;
     }
 
-    // Anonymous users see the sign-up modal once per browser session before
-    // their first generate. After they pick (sign up or skip), the modal
-    // does not re-appear this session. Authenticated users skip the prompt.
-    if (!isAuthenticated && !hasSkippedSignup) {
+    // Manual mode is signup-gated per the V1 funnel. Anonymous users see the
+    // modal on every submit; there is no skip path because the conversion
+    // pitch ("sign up free, then generate as many as you want") is the entire
+    // point of restricting manual mode. They can still close the modal to
+    // abandon, but cannot proceed without an account.
+    if (!isAuthenticated) {
       setShowSignupPrompt(true);
       return;
     }
@@ -375,7 +354,7 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
 
       <div className="flex flex-col items-center gap-3 pt-2">
         <Button type="submit" variant="primary" size="lg" loading={isSubmitting} disabled={isSubmitting || isOverDurationLimit} className="w-full sm:w-auto sm:min-w-[240px] glow-accent">
-          {isSubmitting ? 'Generating...' : 'Generate Track'}
+          {isSubmitting ? 'Building...' : 'Make my cue track'}
         </Button>
         {spec.sections.length > 0 && (
           <p className={cn(
@@ -415,11 +394,6 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
             }
             window.location.href = '/auth/signin?callbackUrl=/create';
           }}
-          onSkip={() => {
-            skipSignupPrompt();
-            setShowSignupPrompt(false);
-            void doGenerate();
-          }}
           onClose={() => setShowSignupPrompt(false)}
         />
       )}
@@ -429,11 +403,10 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
 
 interface SignupPromptModalProps {
   onSignUp: () => void;
-  onSkip: () => void;
   onClose: () => void;
 }
 
-function SignupPromptModal({ onSignUp, onSkip, onClose }: SignupPromptModalProps) {
+function SignupPromptModal({ onSignUp, onClose }: SignupPromptModalProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -467,22 +440,22 @@ function SignupPromptModal({ onSignUp, onSkip, onClose }: SignupPromptModalProps
             id="signup-prompt-title"
             className="font-display text-2xl font-semibold tracking-tight text-[#F0EDE6]"
           >
-            Save your tracks?
+            Sign up to use manual mode
           </h3>
           <p className="mt-3 text-sm leading-relaxed text-muted">
-            Sign up to keep your tracks in your library and unlock a higher
-            per-hour generation limit. Free, takes ten seconds.
+            Manual mode is free once you create an account, and the cap is
+            generous. Takes ten seconds; your spec is saved while you sign in.
           </p>
           <div className="mt-6 flex flex-col gap-2">
             <Button type="button" variant="primary" size="md" onClick={onSignUp}>
-              Sign up
+              Sign up free
             </Button>
             <button
               type="button"
-              onClick={onSkip}
+              onClick={onClose}
               className="rounded-lg px-3 py-2 font-mono text-sm text-muted transition-colors hover:text-[#F0EDE6]"
             >
-              I&apos;m in a rush, just give me the track
+              Not now
             </button>
           </div>
         </div>

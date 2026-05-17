@@ -5,13 +5,13 @@ import { TrackForm } from '@/components/track-form';
 import { auth } from '@/auth';
 
 /**
- * /create — track generation form.
+ * /create — manual mode (full page).
  *
- * Server component so we can detect the user's auth state via auth() and
- * pass it down to the client form. The form uses this to decide whether to
- * show the "Sign up or skip" modal on submit. Anonymous traffic still works
- * end to end; the modal just offers signup as a way to raise the per-hour
- * rate limit.
+ * Mirrors the manual-mode section on the landing page but as a standalone
+ * route, so deep-links and dashboard links land somewhere appropriate. The
+ * submit gate is enforced inside TrackForm (anonymous users see a hard
+ * signup modal with no skip path); the route itself stays anonymous-
+ * reachable so users can window-shop the form before committing to signup.
  */
 export default async function CreatePage() {
   const session = await auth();
@@ -21,14 +21,14 @@ export default async function CreatePage() {
     <>
       <Nav />
       <main className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
-        {/* Page header */}
         <div className="mb-10">
           <h1 className="font-display text-4xl font-semibold tracking-tight text-[#F0EDE6] sm:text-5xl">
-            Create a Track
+            Manual mode
           </h1>
           <p className="mt-3 text-muted text-lg leading-relaxed max-w-xl">
-            Define your song structure, choose your sounds, and generate a
-            studio-quality click track with spoken cues.
+            Skip the upload. Specify your BPM, sections, and click sound
+            directly; we&apos;ll build your cue track.
+            {!isAuthenticated && ' Sign up free to enable; manual mode is generous once you do.'}
           </p>
         </div>
 
