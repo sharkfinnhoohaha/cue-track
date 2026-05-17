@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+.env
+.env.*
+*.log
+test-output/
+.DS_Store
+README.md
+DEPLOY.md
