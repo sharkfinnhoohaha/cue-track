@@ -13,6 +13,9 @@ const {
   mockValues,
   mockReturning,
   mockCheckAndRecord,
+  mockResolveUploadTier,
+  mockCheckUploadQuota,
+  mockRecordUploadAnalysis,
 } = vi.hoisted(() => {
   const mockReturning = vi.fn();
   const mockValues = vi.fn(() => ({ returning: mockReturning }));
@@ -23,6 +26,9 @@ const {
     mockValues,
     mockReturning,
     mockCheckAndRecord: vi.fn(),
+    mockResolveUploadTier: vi.fn(),
+    mockCheckUploadQuota: vi.fn(),
+    mockRecordUploadAnalysis: vi.fn(),
   };
 });
 
@@ -42,6 +48,12 @@ vi.mock('@/lib/rate-limit', async () => {
     checkAndRecordRateLimit: mockCheckAndRecord,
   };
 });
+
+vi.mock('@/lib/upload-quota', () => ({
+  resolveUploadTier: mockResolveUploadTier,
+  checkUploadQuota: mockCheckUploadQuota,
+  recordUploadAnalysis: mockRecordUploadAnalysis,
+}));
 
 import { POST } from './route';
 
@@ -94,6 +106,9 @@ describe('POST /api/tracks/analyze', () => {
     mockValues.mockClear();
     mockInsert.mockClear();
     mockCheckAndRecord.mockReset();
+    mockResolveUploadTier.mockReset();
+    mockCheckUploadQuota.mockReset();
+    mockRecordUploadAnalysis.mockReset();
 
     process.env.DATABASE_URL = 'postgres://mock';
     process.env.RATE_LIMIT_IP_SALT = 'test-salt';
@@ -108,6 +123,14 @@ describe('POST /api/tracks/analyze', () => {
       current: 1,
       retryAfterSeconds: null,
     });
+    mockResolveUploadTier.mockResolvedValue('free');
+    mockCheckUploadQuota.mockResolvedValue({
+      allowed: true,
+      tier: 'free',
+      used: 0,
+      limit: 1,
+    });
+    mockRecordUploadAnalysis.mockResolvedValue(undefined);
     mockReturning.mockResolvedValue([{ id: 'fake-uuid' }]);
 
     fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -331,6 +354,81 @@ describe('POST /api/tracks/analyze', () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body.error).toBe('Track persistence failed');
+    });
+  });
+
+  describe('upload quota (Phase C)', () => {
+    it('records the analysis identifier on success', async () => {
+      const fd = new FormData();
+      fd.append('file', makeAudioFile());
+      await POST(makeFormRequest(fd));
+      expect(mockRecordUploadAnalysis).toHaveBeenCalledTimes(1);
+      const [identifier, trackId] = mockRecordUploadAnalysis.mock.calls[0]!;
+      expect(identifier).toMatch(/^ip:[0-9a-f]{64}$/);
+      expect(trackId).toBe('fake-uuid');
+    });
+
+    it('does NOT block when ENABLE_ANALYZE_PAYWALL is unset even if quota is exceeded', async () => {
+      mockCheckUploadQuota.mockResolvedValue({
+        allowed: false,
+        tier: 'free',
+        used: 1,
+        limit: 1,
+      });
+      const fd = new FormData();
+      fd.append('file', makeAudioFile());
+      const res = await POST(makeFormRequest(fd));
+      expect(res.status).toBe(200);
+    });
+
+    it('returns 402 UPLOAD_QUOTA_EXCEEDED when paywall is enabled and quota exceeded', async () => {
+      process.env.ENABLE_ANALYZE_PAYWALL = 'true';
+      mockCheckUploadQuota.mockResolvedValue({
+        allowed: false,
+        tier: 'free',
+        used: 1,
+        limit: 1,
+      });
+      const fd = new FormData();
+      fd.append('file', makeAudioFile());
+      const res = await POST(makeFormRequest(fd));
+      expect(res.status).toBe(402);
+      const body = await res.json();
+      expect(body.code).toBe('UPLOAD_QUOTA_EXCEEDED');
+      expect(body.requiredTier).toBe('paid');
+      expect(body.details.used).toBe(1);
+      expect(body.details.limit).toBe(1);
+      // No record should be written when the gate fires before analysis.
+      expect(mockRecordUploadAnalysis).not.toHaveBeenCalled();
+    });
+
+    it('skips the gate for paid tier even when paywall is enabled', async () => {
+      process.env.ENABLE_ANALYZE_PAYWALL = 'true';
+      mockResolveUploadTier.mockResolvedValue('paid');
+      mockCheckUploadQuota.mockResolvedValue({
+        allowed: true,
+        tier: 'paid',
+        used: 50,
+        limit: null,
+      });
+      const fd = new FormData();
+      fd.append('file', makeAudioFile());
+      const res = await POST(makeFormRequest(fd));
+      expect(res.status).toBe(200);
+    });
+
+    it('checks BOTH user:id and ip:hash for auth callers', async () => {
+      process.env.ENABLE_ANALYZE_PAYWALL = 'true';
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
+      const fd = new FormData();
+      fd.append('file', makeAudioFile());
+      await POST(makeFormRequest(fd));
+      expect(mockCheckUploadQuota).toHaveBeenCalledTimes(1);
+      const [identifiers] = mockCheckUploadQuota.mock.calls[0]!;
+      expect(identifiers).toEqual([
+        'user:user-abc',
+        expect.stringMatching(/^ip:[0-9a-f]{64}$/),
+      ]);
     });
   });
 });

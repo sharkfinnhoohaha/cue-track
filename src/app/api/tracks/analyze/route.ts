@@ -3,6 +3,11 @@ import crypto from 'crypto';
 import type { SongSpec } from '@/types';
 import { auth } from '@/auth';
 import { checkAndRecordRateLimit, getClientIpHash } from '@/lib/rate-limit';
+import {
+  checkUploadQuota,
+  recordUploadAnalysis,
+  resolveUploadTier,
+} from '@/lib/upload-quota';
 
 export const maxDuration = 60;
 export const runtime = 'nodejs';
@@ -134,13 +139,13 @@ export async function POST(request: NextRequest) {
   // --- Identify caller --------------------------------------------------
   const session = await auth();
   const userId = session?.user?.id ?? null;
+  const ipHash = getClientIpHash(request);
   let rateIdentifier: string;
   let rateKind: 'auth' | 'anon';
   if (userId) {
     rateIdentifier = `user:${userId}`;
     rateKind = 'auth';
   } else {
-    const ipHash = getClientIpHash(request);
     if (!ipHash) {
       return NextResponse.json(
         {
@@ -154,6 +159,13 @@ export async function POST(request: NextRequest) {
     rateIdentifier = `ip:${ipHash}`;
     rateKind = 'anon';
   }
+
+  // Identifier set used for the upload-quota check. Auth callers count
+  // both their userId AND their current IP hash so signing up does not
+  // silently reset the free cap; anon callers count only their IP hash.
+  const quotaIdentifiers: string[] = userId
+    ? [`user:${userId}`, ...(ipHash ? [`ip:${ipHash}`] : [])]
+    : [`ip:${ipHash!}`];
 
   // --- Rate limit (shared with /generate quota) -------------------------
   const rate = await checkAndRecordRateLimit(rateIdentifier, rateKind);
@@ -178,10 +190,32 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // --- Phase C paywall stub (gated off in V1) --------------------------
-  if (process.env.ENABLE_ANALYZE_PAYWALL === 'true') {
-    // Intentional no-op for Phase B. Wiring lands in Phase C alongside the
-    // upload_analyses table and the 402 UPLOAD_QUOTA_EXCEEDED response.
+  // --- Upload quota gate (Phase C) -------------------------------------
+  // The gate stays dormant in production until ENABLE_ANALYZE_PAYWALL=true
+  // is set on Vercel. When enforcement is on, anon callers get exactly one
+  // free analysis (tracked by salted IP hash); auth users without an
+  // active Pro subscription get the same one (their userId and their IP
+  // are both checked so a sign-up does not reset the cap). Paid users
+  // (active or past-due Pro subscription) skip the gate entirely.
+  const tier = await resolveUploadTier(userId);
+  const quota = await checkUploadQuota(quotaIdentifiers, tier);
+  if (
+    process.env.ENABLE_ANALYZE_PAYWALL === 'true' &&
+    !quota.allowed
+  ) {
+    return NextResponse.json(
+      {
+        error: 'Upload quota exceeded',
+        code: 'UPLOAD_QUOTA_EXCEEDED',
+        requiredTier: 'paid',
+        details: {
+          used: quota.used,
+          limit: quota.limit,
+          documentation: '/pricing',
+        },
+      },
+      { status: 402 },
+    );
   }
 
   // --- Forward to worker ------------------------------------------------
@@ -326,6 +360,13 @@ export async function POST(request: NextRequest) {
         { status: 500 },
       );
     }
+
+    // Record the analysis for quota accounting. Best-effort; a failure
+    // here is logged but does not fail the route — the worker work is
+    // already done and the user should not be punished for our DB
+    // outage. The next call will re-check the quota against whatever
+    // rows did make it in.
+    await recordUploadAnalysis(rateIdentifier, saved.id);
 
     return NextResponse.json({
       id: saved.id,

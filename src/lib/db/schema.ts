@@ -147,6 +147,42 @@ export const rateLimits = pgTable(
   }),
 );
 
+// --- Upload analysis quota ---
+
+/**
+ * Append-only log of /api/tracks/analyze requests, used to enforce the
+ * "1 free upload analysis per anon, then paywall" rule from the V1 funnel.
+ *
+ * Identifier scheme parallels rate_limits:
+ *   "user:<userId>"  for authenticated callers
+ *   "ip:<sha256(salt+ip)>"  for anonymous callers
+ *
+ * Quota check: count rows for the identifier (and the user's current IP
+ * for auth callers, so signup does not reset the cap). If >= the per-tier
+ * cap and the caller is not a Pro subscriber, return 402.
+ *
+ * Distinct from rate_limits because the lifetime semantics differ: rate
+ * limits roll on a 1-hour window and are cleaned up daily, while upload
+ * quota is lifetime-cumulative for the free tier and should not be
+ * touched by the existing cron. A separate cleanup policy (e.g. "keep
+ * 90 days of paid history for analytics, anon entries forever") can land
+ * on this table without affecting the rate-limit cron.
+ */
+export const uploadAnalyses = pgTable(
+  'upload_analyses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    identifier: text('identifier').notNull(),
+    trackId: uuid('track_id'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    identifierIdx: index('upload_analyses_identifier_idx').on(table.identifier),
+  }),
+);
+
 // --- TTS caching ---
 
 /**
@@ -200,6 +236,9 @@ export type NewVerificationToken = typeof verificationTokens.$inferInsert;
 
 export type RateLimit = typeof rateLimits.$inferSelect;
 export type NewRateLimit = typeof rateLimits.$inferInsert;
+
+export type UploadAnalysis = typeof uploadAnalyses.$inferSelect;
+export type NewUploadAnalysis = typeof uploadAnalyses.$inferInsert;
 
 export type TtsCacheRow = typeof ttsCache.$inferSelect;
 export type NewTtsCacheRow = typeof ttsCache.$inferInsert;
