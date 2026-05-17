@@ -13,29 +13,51 @@ import type { SongSpec } from '@/types';
  * realistic duration values for the cap test.
  */
 
-const { mockAuth, mockInsert, mockValues, mockReturning, mockCheckAndRecord } =
-  vi.hoisted(() => {
-    const mockReturning = vi.fn();
-    const mockValues = vi.fn(() => ({ returning: mockReturning }));
-    const mockInsert = vi.fn(() => ({ values: mockValues }));
-    return {
-      mockAuth: vi.fn(),
-      mockInsert,
-      mockValues,
-      mockReturning,
-      mockCheckAndRecord: vi.fn(),
-    };
-  });
+const {
+  mockAuth,
+  mockInsert,
+  mockValues,
+  mockReturning,
+  mockCheckAndRecord,
+  mockSubscriptionLookup,
+} = vi.hoisted(() => {
+  const mockReturning = vi.fn();
+  const mockValues = vi.fn(() => ({ returning: mockReturning }));
+  const mockInsert = vi.fn(() => ({ values: mockValues }));
+  return {
+    mockAuth: vi.fn(),
+    mockInsert,
+    mockValues,
+    mockReturning,
+    mockCheckAndRecord: vi.fn(),
+    // Resolves the chain db.select(...).from(users).where(...).limit(1).
+    // Returning [] = no row, returning [{ subscriptionStatus }] = found.
+    mockSubscriptionLookup: vi.fn(),
+  };
+});
 
 vi.mock('@/auth', () => ({ auth: mockAuth }));
 
 vi.mock('@/lib/db', () => ({
-  db: { insert: mockInsert },
+  db: {
+    insert: mockInsert,
+    select: vi.fn(() => ({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          limit: vi.fn().mockImplementation(async () => mockSubscriptionLookup()),
+        }),
+      }),
+    })),
+  },
   tracks: {
     id: 'mock_id_column',
     previewUrl: 'mock_preview_column',
     status: 'mock_status_column',
     duration: 'mock_duration_column',
+  },
+  users: {
+    id: 'mock_user_id',
+    subscriptionStatus: 'mock_subscription_status',
   },
 }));
 
@@ -51,6 +73,8 @@ vi.mock('@/lib/rate-limit', async () => {
 
 import { POST } from './route';
 
+// Default to a Standard voice so existing happy-path tests don't trip the
+// Pro-tier gate at submit. Voice-tier behavior is covered separately below.
 const VALID_SPEC: SongSpec = {
   title: 'Test',
   bpm: 120,
@@ -59,7 +83,7 @@ const VALID_SPEC: SongSpec = {
     { id: '1', name: 'Intro', bars: 4 },
     { id: '2', name: 'Verse', bars: 4 },
   ],
-  voiceId: 'en-US-Studio-M',
+  voiceId: 'en-US-Standard-D',
   clickSound: 'classic',
   format: 'wav',
   enableCountIn: true,
@@ -94,6 +118,8 @@ describe('POST /api/tracks/generate', () => {
     mockValues.mockClear();
     mockInsert.mockClear();
     mockCheckAndRecord.mockReset();
+    mockSubscriptionLookup.mockReset();
+    mockSubscriptionLookup.mockResolvedValue([]);
 
     process.env.DATABASE_URL = 'postgres://mock';
     process.env.RATE_LIMIT_IP_SALT = 'test-salt';
@@ -292,6 +318,59 @@ describe('POST /api/tracks/generate', () => {
       expect(res.status).toBe(429);
       const body = await res.json();
       expect(body.authBoost).toBe(false);
+    });
+  });
+
+  describe('voice tier gate', () => {
+    it('returns 402 when an anon caller requests a Studio voice', async () => {
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, voiceId: 'en-US-Studio-M' }),
+      );
+      expect(res.status).toBe(402);
+      const body = await res.json();
+      expect(body.code).toBe('VOICE_TIER_REQUIRED');
+      expect(body.requiredTier).toBe('studio');
+      expect(body.voiceId).toBe('en-US-Studio-M');
+    });
+
+    it('returns 402 when an auth user without Pro requests a Studio voice', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
+      mockSubscriptionLookup.mockResolvedValue([
+        { subscriptionStatus: 'none' },
+      ]);
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, voiceId: 'en-US-Neural2-D' }),
+      );
+      expect(res.status).toBe(402);
+      const body = await res.json();
+      expect(body.code).toBe('VOICE_TIER_REQUIRED');
+    });
+
+    it('allows a Pro subscriber to use a Studio voice', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
+      mockSubscriptionLookup.mockResolvedValue([
+        { subscriptionStatus: 'active' },
+      ]);
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, voiceId: 'en-US-Studio-M' }),
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it('allows anon to use a Standard voice', async () => {
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, voiceId: 'en-US-Standard-D' }),
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it('fails closed when the subscription lookup throws', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
+      mockSubscriptionLookup.mockRejectedValue(new Error('db down'));
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, voiceId: 'en-US-Studio-M' }),
+      );
+      expect(res.status).toBe(402);
     });
   });
 

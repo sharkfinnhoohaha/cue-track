@@ -5,6 +5,8 @@ import { buildTimeGrid } from '@/lib/audio/grid';
 import { DEFAULT_SAMPLE_RATE } from '@/lib/audio/types';
 import { auth } from '@/auth';
 import { checkAndRecordRateLimit, getClientIpHash } from '@/lib/rate-limit';
+import { getVoiceTier } from '@/lib/audio/types';
+import { eq } from 'drizzle-orm';
 
 export const maxDuration = 60;
 export const runtime = 'nodejs';
@@ -238,6 +240,46 @@ export async function POST(request: NextRequest) {
           : undefined,
       },
     );
+  }
+
+  // --- Voice tier gate -------------------------------------------------
+  // Studio voices cost 40x more per character than Standard (Google TTS
+  // pricing: $160/M vs $4/M). Free users get Standard; Studio requires
+  // an active Pro subscription. The form surfaces a (PRO) suffix on the
+  // option label so the upsell is visible before submit, but the route
+  // is the source of truth so anyone bypassing the UI also hits this.
+  if (getVoiceTier(spec.voiceId) === 'studio') {
+    let hasActiveSub = false;
+    if (userId) {
+      try {
+        const { db, users } = await import('@/lib/db');
+        const rows = await db
+          .select({ subscriptionStatus: users.subscriptionStatus })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+        hasActiveSub = rows[0]?.subscriptionStatus === 'active';
+      } catch (err) {
+        console.error('[tracks/generate] subscription lookup failed:', err);
+        // Fail closed: if we cannot verify the subscription, treat as
+        // unpaid. Avoids the cost-leak path where a transient DB error
+        // unlocks Studio voices for free.
+        hasActiveSub = false;
+      }
+    }
+    if (!hasActiveSub) {
+      return NextResponse.json(
+        {
+          error: 'Premium voice requires Pro subscription',
+          details:
+            'Studio voices are part of the Pro plan. Pick a Standard voice, or subscribe at /pricing.',
+          code: 'VOICE_TIER_REQUIRED',
+          requiredTier: 'studio',
+          voiceId: spec.voiceId,
+        },
+        { status: 402 },
+      );
+    }
   }
 
   const trackId = crypto.randomUUID();

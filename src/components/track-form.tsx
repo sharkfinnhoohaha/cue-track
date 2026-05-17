@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { SongSpec, SongSection, TimeSignature } from '@/types';
-import { AVAILABLE_VOICES } from '@/lib/audio/types';
+import { AVAILABLE_VOICES, getVoiceTier } from '@/lib/audio/types';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -32,9 +32,14 @@ const TIME_SIGNATURES: { value: string; label: string; ts: TimeSignature }[] = [
 //
 // Deriving from AVAILABLE_VOICES means new voices added to types.ts appear
 // here automatically with no further form changes.
+// Studio-tier voices cost $160 per million chars vs $4/M for Standard.
+// The dropdown surfaces the tier inline ("(PRO)") so the upsell is visible
+// before submit; the generate route returns 402 if an anon caller picks a
+// Studio voice. Standard voices stay first in the list so the default
+// selection (AVAILABLE_VOICES[0]) is free.
 const VOICE_OPTIONS = AVAILABLE_VOICES.map((v) => ({
   value: v.id,
-  label: v.label,
+  label: v.tier === 'studio' ? `${v.label} (PRO)` : v.label,
 }));
 
 const CLICK_SOUNDS: { id: SongSpec['clickSound']; label: string; desc: string }[] = [
@@ -318,7 +323,14 @@ export function TrackForm({ isAuthenticated }: TrackFormProps) {
 
       <Card header="Sound & Voice">
         <div className="space-y-5">
-          <Select label="Voice" value={spec.voiceId} onChange={(e) => update('voiceId', e.target.value)} options={VOICE_OPTIONS} />
+          <div>
+            <Select label="Voice" value={spec.voiceId} onChange={(e) => update('voiceId', e.target.value)} options={VOICE_OPTIONS} />
+            {getVoiceTier(spec.voiceId) === 'studio' && !isAuthenticated && (
+              <p className="mt-1.5 text-xs text-yellow-400 font-mono">
+                Studio voices require a Pro subscription. Sign up to use, or pick a Standard voice.
+              </p>
+            )}
+          </div>
           <div>
             <label className="label font-mono text-xs uppercase tracking-wider">Click Sound</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
