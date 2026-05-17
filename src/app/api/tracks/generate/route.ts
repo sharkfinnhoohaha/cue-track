@@ -3,6 +3,8 @@ import crypto from 'crypto';
 import type { SongSpec } from '@/types';
 import { buildTimeGrid } from '@/lib/audio/grid';
 import { DEFAULT_SAMPLE_RATE } from '@/lib/audio/types';
+import { auth } from '@/auth';
+import { checkAndRecordRateLimit, getClientIpHash } from '@/lib/rate-limit';
 
 export const maxDuration = 60;
 export const runtime = 'nodejs';
@@ -185,6 +187,59 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // --- Rate limit --------------------------------------------------------
+  // Authenticated users are throttled per userId at GENERATE_RATE_LIMIT_AUTH_
+  // PER_HOUR (default 50). Anonymous users are throttled per salted IP hash
+  // at GENERATE_RATE_LIMIT_ANON_PER_HOUR (default 5). The "sign up to lift
+  // the cap" UX is surfaced by the frontend; here we just return 429 with
+  // authBoost: true so the client can render a useful message.
+  //
+  // Fail-open by design: if the rate_limits table is missing (migration not
+  // run yet) or the DB errors out, the limiter logs and allows the request.
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+  let rateIdentifier: string;
+  let rateKind: 'auth' | 'anon';
+  if (userId) {
+    rateIdentifier = `user:${userId}`;
+    rateKind = 'auth';
+  } else {
+    const ipHash = getClientIpHash(request);
+    if (!ipHash) {
+      return NextResponse.json(
+        {
+          error: 'Cannot determine client identifier',
+          details:
+            'No session and no forwarded IP header. Sign in to generate.',
+        },
+        { status: 400 },
+      );
+    }
+    rateIdentifier = `ip:${ipHash}`;
+    rateKind = 'anon';
+  }
+  const rate = await checkAndRecordRateLimit(rateIdentifier, rateKind);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      {
+        error: 'Rate limit exceeded',
+        details:
+          rateKind === 'auth'
+            ? `You have generated ${rate.current} tracks in the last hour (limit ${rate.limit}). Try again in about ${Math.ceil((rate.retryAfterSeconds ?? 60) / 60)} minute(s).`
+            : `This network has generated ${rate.current} tracks in the last hour (limit ${rate.limit}). Sign in for a higher cap, or try again in about ${Math.ceil((rate.retryAfterSeconds ?? 60) / 60)} minute(s).`,
+        code: 'RATE_LIMITED',
+        retryAfterSeconds: rate.retryAfterSeconds,
+        authBoost: rateKind === 'anon',
+      },
+      {
+        status: 429,
+        headers: rate.retryAfterSeconds
+          ? { 'Retry-After': String(rate.retryAfterSeconds) }
+          : undefined,
+      },
+    );
+  }
+
   const trackId = crypto.randomUUID();
 
   try {
@@ -231,6 +286,7 @@ export async function POST(request: NextRequest) {
         previewUrl,
         fullUrl,
         duration: durationSec,
+        userId: userId ?? undefined,
       })
       .returning({
         id: tracks.id,

@@ -6,6 +6,7 @@ import {
   jsonb,
   timestamp,
   pgEnum,
+  index,
 } from 'drizzle-orm/pg-core';
 import type { SongSpec } from '@/types';
 
@@ -102,6 +103,36 @@ export const verificationTokens = pgTable('verification_tokens', {
   expires: timestamp('expires', { withTimezone: true }).notNull(),
 });
 
+// --- Rate limiting ---
+
+/**
+ * Throttle attempts at /api/tracks/generate. Each successful request appends
+ * one row keyed by an identifier: "user:<userId>" for authenticated users,
+ * "ip:<sha256(salt+ip)>" for anonymous traffic. The rate-limit check counts
+ * rows in the trailing hour for the identifier.
+ *
+ * Migration: scripts/migrations/2026-05-17_add_rate_limits.sql
+ *
+ * Storage grows with traffic; an off-hours cleanup job (delete rows older
+ * than 24h) is a P1 follow-up.
+ */
+export const rateLimits = pgTable(
+  'rate_limits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    identifier: text('identifier').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    identifierCreatedAtIdx: index('rate_limits_identifier_created_at_idx').on(
+      table.identifier,
+      table.createdAt,
+    ),
+  }),
+);
+
 // --- Inferred types ---
 
 export type Track = typeof tracks.$inferSelect;
@@ -124,3 +155,6 @@ export type NewSession = typeof sessions.$inferInsert;
 
 export type VerificationToken = typeof verificationTokens.$inferSelect;
 export type NewVerificationToken = typeof verificationTokens.$inferInsert;
+
+export type RateLimit = typeof rateLimits.$inferSelect;
+export type NewRateLimit = typeof rateLimits.$inferInsert;
