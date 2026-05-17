@@ -192,6 +192,30 @@ export async function POST(request: NextRequest) {
     const grid = buildTimeGrid(spec, DEFAULT_SAMPLE_RATE);
     const durationSec = Math.round(grid.totalDuration);
 
+    // --- Enforce duration cap ----------------------------------------
+    // Reject specs that compute to a track longer than the configured
+    // ceiling so users do not save specs the system cannot render. The
+    // cap is set via MAX_TRACK_DURATION_SECONDS (default 1800, i.e.
+    // 30 minutes). The frontend mirrors the same value via
+    // NEXT_PUBLIC_MAX_TRACK_DURATION_SECONDS for the UI warning.
+    const maxDurationRaw = process.env.MAX_TRACK_DURATION_SECONDS;
+    const maxDurationSec = maxDurationRaw ? Number(maxDurationRaw) : 1800;
+    if (
+      Number.isFinite(maxDurationSec) &&
+      maxDurationSec > 0 &&
+      durationSec > maxDurationSec
+    ) {
+      return NextResponse.json(
+        {
+          error: 'Track duration exceeds the configured maximum',
+          details: `Requested duration ${durationSec}s exceeds limit ${maxDurationSec}s. Reduce bars or sections.`,
+          maxSeconds: maxDurationSec,
+          requestedSeconds: durationSec,
+        },
+        { status: 400 },
+      );
+    }
+
     // --- Persist spec to DB ------------------------------------------
     const previewUrl = `/api/tracks/${trackId}/download?preview=true`;
     const fullUrl = `/api/tracks/${trackId}/download`;
