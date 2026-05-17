@@ -178,7 +178,22 @@ describe('POST /api/tracks/generate', () => {
         duration: 10,
       },
     ]);
+    // Default UPDATE return so anon-with-existingTrackId tests below have
+    // a sensible fallthrough; tests that care about specific update shape
+    // override with mockUpdateReturning.mockResolvedValue([...]) inline.
+    mockUpdateReturning.mockResolvedValue([
+      {
+        id: 'updated-uuid',
+        previewUrl: '/api/tracks/updated-uuid/download?preview=true',
+        status: 'ready',
+        duration: 10,
+      },
+    ]);
   });
+
+  // Reusable UUID so anon tests that need to bypass the manual-mode signup
+  // gate can supply existingTrackId and route through the UPDATE branch.
+  const DRAFT_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 
   afterEach(() => {
     if (originalDbUrl === undefined) delete process.env.DATABASE_URL;
@@ -297,12 +312,12 @@ describe('POST /api/tracks/generate', () => {
       expect(body.error).toBe('Server not configured');
     });
 
-    it('returns 400 when anon caller has no forwarded IP', async () => {
+    it('returns 400 when anon caller (with draft) has no forwarded IP', async () => {
       const req = new NextRequest(
         'https://example.test/api/tracks/generate',
         {
           method: 'POST',
-          body: JSON.stringify(VALID_SPEC),
+          body: JSON.stringify({ ...VALID_SPEC, existingTrackId: DRAFT_ID }),
           headers: { 'content-type': 'application/json' },
         },
       );
@@ -320,22 +335,26 @@ describe('POST /api/tracks/generate', () => {
       expect(mockCheckAndRecord).toHaveBeenCalledWith('user:user-abc', 'auth');
     });
 
-    it('uses ip:<hash> identifier for anonymous callers', async () => {
-      await POST(makeRequest(VALID_SPEC));
+    it('uses ip:<hash> identifier for anonymous callers (finalizing a draft)', async () => {
+      await POST(
+        makeRequest({ ...VALID_SPEC, existingTrackId: DRAFT_ID }),
+      );
       expect(mockCheckAndRecord).toHaveBeenCalledTimes(1);
       const [identifier, kind] = mockCheckAndRecord.mock.calls[0]!;
       expect(identifier).toMatch(/^ip:[0-9a-f]{64}$/);
       expect(kind).toBe('anon');
     });
 
-    it('returns 429 with authBoost true for anon over-limit', async () => {
+    it('returns 429 with authBoost true for anon over-limit (finalizing a draft)', async () => {
       mockCheckAndRecord.mockResolvedValue({
         allowed: false,
         limit: 5,
         current: 5,
         retryAfterSeconds: 1800,
       });
-      const res = await POST(makeRequest(VALID_SPEC));
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, existingTrackId: DRAFT_ID }),
+      );
       expect(res.status).toBe(429);
       const body = await res.json();
       expect(body.code).toBe('RATE_LIMITED');
@@ -359,9 +378,13 @@ describe('POST /api/tracks/generate', () => {
   });
 
   describe('voice tier gate', () => {
-    it('returns 402 when an anon caller requests a Studio voice', async () => {
+    it('returns 402 when an anon caller (finalizing a draft) requests a Studio voice', async () => {
       const res = await POST(
-        makeRequest({ ...VALID_SPEC, voiceId: 'en-US-Studio-M' }),
+        makeRequest({
+          ...VALID_SPEC,
+          voiceId: 'en-US-Studio-M',
+          existingTrackId: DRAFT_ID,
+        }),
       );
       expect(res.status).toBe(402);
       const body = await res.json();
@@ -394,9 +417,13 @@ describe('POST /api/tracks/generate', () => {
       expect(res.status).toBe(200);
     });
 
-    it('allows anon to use a Standard voice', async () => {
+    it('allows anon (finalizing a draft) to use a Standard voice', async () => {
       const res = await POST(
-        makeRequest({ ...VALID_SPEC, voiceId: 'en-US-Standard-D' }),
+        makeRequest({
+          ...VALID_SPEC,
+          voiceId: 'en-US-Standard-D',
+          existingTrackId: DRAFT_ID,
+        }),
       );
       expect(res.status).toBe(200);
     });
@@ -413,6 +440,7 @@ describe('POST /api/tracks/generate', () => {
 
   describe('duration cap', () => {
     it('returns 400 when computed duration exceeds the configured cap', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
       // VALID_SPEC computes to ~10 seconds; set the cap to 5s to trigger.
       process.env.MAX_TRACK_DURATION_SECONDS = '5';
       const res = await POST(makeRequest(VALID_SPEC));
@@ -424,13 +452,15 @@ describe('POST /api/tracks/generate', () => {
     });
 
     it('does not enforce the cap when MAX_TRACK_DURATION_SECONDS is unset', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
       const res = await POST(makeRequest(VALID_SPEC));
       expect(res.status).toBe(200);
     });
   });
 
   describe('happy path', () => {
-    it('persists the spec and returns the saved track metadata', async () => {
+    it('persists the spec and returns the saved track metadata (auth user, manual mode)', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
       const res = await POST(makeRequest(VALID_SPEC));
       expect(res.status).toBe(200);
       const body = await res.json();
@@ -450,16 +480,11 @@ describe('POST /api/tracks/generate', () => {
       const insertedRow = (mockValues.mock.calls[0] as unknown as [Record<string, unknown>])[0];
       expect(insertedRow.userId).toBe('user-abc');
     });
-
-    it('leaves userId undefined for anon callers', async () => {
-      await POST(makeRequest(VALID_SPEC));
-      const insertedRow = (mockValues.mock.calls[0] as unknown as [Record<string, unknown>])[0];
-      expect(insertedRow.userId).toBeUndefined();
-    });
   });
 
   describe('persistence failure', () => {
     it('returns 500 when the insert returns no rows', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
       mockReturning.mockResolvedValue([]);
       const res = await POST(makeRequest(VALID_SPEC));
       expect(res.status).toBe(500);
@@ -468,12 +493,42 @@ describe('POST /api/tracks/generate', () => {
     });
 
     it('returns 500 when the insert throws', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
       mockReturning.mockRejectedValue(new Error('db down'));
       const res = await POST(makeRequest(VALID_SPEC));
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body.error).toBe('Track persistence failed');
       expect(body.details).toBe('db down');
+    });
+  });
+
+  describe('manual mode signup gate (Phase C)', () => {
+    it('returns 401 SIGNUP_REQUIRED for anon callers with no existingTrackId', async () => {
+      const res = await POST(makeRequest(VALID_SPEC));
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.code).toBe('SIGNUP_REQUIRED');
+    });
+
+    it('allows anon callers when they supply a valid existingTrackId (analyze→finalize)', async () => {
+      const res = await POST(
+        makeRequest({ ...VALID_SPEC, existingTrackId: DRAFT_ID }),
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it('allows auth callers without existingTrackId (manual mode)', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
+      const res = await POST(makeRequest(VALID_SPEC));
+      expect(res.status).toBe(200);
+    });
+
+    it('does not call rate-limit, voice-tier, or persistence when gate fires', async () => {
+      await POST(makeRequest(VALID_SPEC));
+      expect(mockCheckAndRecord).not.toHaveBeenCalled();
+      expect(mockInsert).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
   });
 
@@ -585,7 +640,8 @@ describe('POST /api/tracks/generate', () => {
       expect(setArg.userId).toBe('user-abc');
     });
 
-    it('still uses INSERT (not UPDATE) when no existingTrackId is supplied', async () => {
+    it('still uses INSERT (not UPDATE) when no existingTrackId is supplied (auth user)', async () => {
+      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
       const res = await POST(makeRequest(VALID_SPEC));
       expect(res.status).toBe(200);
       expect(mockInsert).toHaveBeenCalledTimes(1);

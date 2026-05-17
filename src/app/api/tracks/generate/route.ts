@@ -215,17 +215,42 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // --- Manual-mode signup gate -----------------------------------------
+  // Per the V1 funnel: manual mode (filling out the form directly) is
+  // signup-only. The upload-analysis flow remains anon-friendly because
+  // the user is finalizing a draft they already created via /analyze,
+  // identified by a server-issued existingTrackId. So anon callers can
+  // hit /generate only when they have an existingTrackId; without one,
+  // it is a manual-mode submission and must be authenticated.
+  //
+  // The TrackForm client component renders a signup modal before reaching
+  // this branch in the normal flow, but this gate is the authoritative
+  // backstop for anyone bypassing the UI (curl, scripts, replayed
+  // requests after sign-out).
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+  if (!userId && !existingTrackId) {
+    return NextResponse.json(
+      {
+        error: 'Sign in to use manual mode',
+        details:
+          'Manual track generation requires an account. Upload a song instead to try Cue Track without signing up.',
+        code: 'SIGNUP_REQUIRED',
+      },
+      { status: 401 },
+    );
+  }
+
   // --- Rate limit --------------------------------------------------------
   // Authenticated users are throttled per userId at GENERATE_RATE_LIMIT_AUTH_
-  // PER_HOUR (default 50). Anonymous users are throttled per salted IP hash
-  // at GENERATE_RATE_LIMIT_ANON_PER_HOUR (default 5). The "sign up to lift
-  // the cap" UX is surfaced by the frontend; here we just return 429 with
-  // authBoost: true so the client can render a useful message.
+  // PER_HOUR (default 200). Anonymous users finalizing an upload draft are
+  // throttled per salted IP hash at GENERATE_RATE_LIMIT_ANON_PER_HOUR
+  // (default 5). The "sign up to lift the cap" UX is surfaced by the
+  // frontend; here we just return 429 with authBoost: true so the client
+  // can render a useful message.
   //
   // Fail-open by design: if the rate_limits table is missing (migration not
   // run yet) or the DB errors out, the limiter logs and allows the request.
-  const session = await auth();
-  const userId = session?.user?.id ?? null;
   let rateIdentifier: string;
   let rateKind: 'auth' | 'anon';
   if (userId) {

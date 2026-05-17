@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/cn';
 
@@ -21,11 +22,17 @@ import { cn } from '@/lib/cn';
 const ACCEPTED_MIME = 'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave';
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
 
+interface PaywallState {
+  used: number;
+  limit: number;
+}
+
 export function UploadForm() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paywall, setPaywall] = useState<PaywallState | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -72,6 +79,7 @@ export function UploadForm() {
     if (!file || isAnalyzing) return;
     setIsAnalyzing(true);
     setError(null);
+    setPaywall(null);
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -82,31 +90,43 @@ export function UploadForm() {
       });
 
       if (!res.ok) {
-        let body: { error?: string; code?: string; details?: string } = {};
+        let body: {
+          error?: string;
+          code?: string;
+          details?:
+            | string
+            | { used?: number; limit?: number; documentation?: string };
+        } = {};
         try {
           body = await res.json();
         } catch {
           // ignore body parse errors; fall through to status-based message
         }
+        if (
+          res.status === 402 &&
+          body.code === 'UPLOAD_QUOTA_EXCEEDED' &&
+          body.details &&
+          typeof body.details === 'object'
+        ) {
+          setPaywall({
+            used: typeof body.details.used === 'number' ? body.details.used : 1,
+            limit:
+              typeof body.details.limit === 'number' ? body.details.limit : 1,
+          });
+          setIsAnalyzing(false);
+          return;
+        }
         if (res.status === 429) {
           throw new Error(
-            body.details ||
+            (typeof body.details === 'string' ? body.details : null) ||
               body.error ||
               'Rate limit exceeded. Try again later.',
           );
         }
         if (res.status === 422) {
           throw new Error(
-            body.details ||
+            (typeof body.details === 'string' ? body.details : null) ||
               "We couldn't decode that file. Try a different MP3 or WAV.",
-          );
-        }
-        if (res.status === 402) {
-          // Phase C will land a richer paywall surface; for now expose the
-          // upgrade path inline.
-          throw new Error(
-            body.details ||
-              "You've used your free analysis. Upgrade at /pricing to continue.",
           );
         }
         throw new Error(
@@ -133,8 +153,62 @@ export function UploadForm() {
     setFile(null);
     setIsAnalyzing(false);
     setError(null);
+    setPaywall(null);
     if (inputRef.current) inputRef.current.value = '';
   }, []);
+
+  if (paywall) {
+    return (
+      <div className="mx-auto max-w-[640px]">
+        <div className="rounded-2xl border border-black/[.08] bg-white p-10 text-center">
+          <p className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-3">
+            You&apos;ve used your free analysis
+          </p>
+          <h3 className="font-sans font-black tracking-[-0.03em] text-[#1d1d1f] mb-3 text-[clamp(22px,3vw,30px)]">
+            One more track? Pick a plan.
+          </h3>
+          <p className="text-[14px] text-[#6e6e73] max-w-[440px] mx-auto mb-7 leading-[1.55]">
+            You&apos;ve analyzed {paywall.used} of {paywall.limit} free uploads.
+            Subscribe Pro for unlimited analyses + Studio voices, or grab a
+            single track for the next set.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-[480px] mx-auto">
+            <Link
+              href="/pricing"
+              className="flex flex-col items-center justify-center rounded-xl border border-black/[.13] bg-white px-5 py-5 text-[#1d1d1f] hover:opacity-80 transition-opacity"
+            >
+              <span className="font-mono text-[10px] tracking-[.12em] uppercase text-[#b0b0b5] mb-1.5">
+                Per track
+              </span>
+              <span className="font-mono text-[26px] font-semibold tracking-[-0.03em] leading-none mb-1">
+                $3
+              </span>
+              <span className="text-[12px] text-[#6e6e73]">one-time</span>
+            </Link>
+            <Link
+              href="/pricing"
+              className="flex flex-col items-center justify-center rounded-xl bg-[#1d1d1f] px-5 py-5 text-white hover:opacity-85 transition-opacity"
+            >
+              <span className="font-mono text-[10px] tracking-[.12em] uppercase text-white/40 mb-1.5">
+                Pro
+              </span>
+              <span className="font-mono text-[26px] font-semibold tracking-[-0.03em] leading-none mb-1">
+                $19
+              </span>
+              <span className="text-[12px] text-white/60">per month · unlimited</span>
+            </Link>
+          </div>
+          <button
+            type="button"
+            onClick={reset}
+            className="mt-6 text-[12px] text-[#6e6e73] hover:text-[#1d1d1f] underline underline-offset-4"
+          >
+            Pick a different file
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-[640px]">
