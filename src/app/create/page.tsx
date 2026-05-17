@@ -1,11 +1,22 @@
-'use client';
-
 import React from 'react';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
 import { TrackForm } from '@/components/track-form';
+import { auth } from '@/auth';
 
-export default function CreatePage() {
+/**
+ * /create — track generation form.
+ *
+ * Server component so we can detect the user's auth state via auth() and
+ * pass it down to the client form. The form uses this to decide whether to
+ * show the "Sign up or skip" modal on submit. Anonymous traffic still works
+ * end to end; the modal just offers signup as a way to raise the per-hour
+ * rate limit.
+ */
+export default async function CreatePage() {
+  const session = await auth();
+  const isAuthenticated = !!session?.user?.id;
+
   return (
     <>
       <Nav />
@@ -21,7 +32,7 @@ export default function CreatePage() {
           </p>
         </div>
 
-        <TrackForm />
+        <TrackForm isAuthenticated={isAuthenticated} />
       </main>
       <Footer />
     </>
