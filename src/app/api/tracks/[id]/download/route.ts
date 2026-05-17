@@ -122,6 +122,30 @@ export async function GET(
     }
   } catch (err) {
     console.error('[tracks/download] Render failed:', err);
+
+    // Best-effort: mark the track as failed so the 410 path above (line
+    // ~103) becomes reachable on subsequent downloads of the same id.
+    // Wrapped in its own try/catch so a DB write failure does not mask
+    // the original render error; we still return the 500 below either way.
+    //
+    // Accepted trade-off: false-positive failures (transient TTS rate
+    // limits, network blips) will mark the track as 'failed' too. The
+    // operator can manually flip status back to 'ready' to allow re-render.
+    // For configuration errors (e.g. TTS_STRICT=true with no creds), every
+    // attempted render will set 'failed' until config is fixed; this is
+    // acceptable because the failure surface is loud rather than silent.
+    try {
+      await db
+        .update(tracks)
+        .set({ status: 'failed' })
+        .where(eq(tracks.id, id));
+    } catch (updateErr) {
+      console.error(
+        '[tracks/download] Failed to mark track as failed:',
+        updateErr,
+      );
+    }
+
     return NextResponse.json(
       {
         error: 'Track rendering failed',
