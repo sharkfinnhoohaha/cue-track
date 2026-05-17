@@ -1,10 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 /**
- * Tests for POST /api/tracks/analyze. Mocks the worker fetch, auth, rate
- * limit, and DB insert so we can exercise validation, identification,
- * worker-error mapping, and persistence in isolation.
+ * Tests for POST /api/tracks/analyze (Phase D async contract).
+ *
+ * The route now returns 202 + jobId after enqueueing an analyze_jobs row
+ * and kicking off the worker call via @vercel/functions waitUntil. The
+ * actual worker fetch + tracks insert happen in src/lib/analyze-jobs.ts
+ * (covered by its own tests, not duplicated here).
+ *
+ * Pre-async sync-contract tests for this route lived at 434 lines; the
+ * async refactor replaces them. See PR-B description for the contract
+ * change. Background job behavior is covered indirectly by asserting
+ * waitUntil was called with the runAnalyzeJob promise.
  */
 
 const {
@@ -15,7 +23,8 @@ const {
   mockCheckAndRecord,
   mockResolveUploadTier,
   mockCheckUploadQuota,
-  mockRecordUploadAnalysis,
+  mockWaitUntil,
+  mockRunAnalyzeJob,
 } = vi.hoisted(() => {
   const mockReturning = vi.fn();
   const mockValues = vi.fn(() => ({ returning: mockReturning }));
@@ -28,7 +37,8 @@ const {
     mockCheckAndRecord: vi.fn(),
     mockResolveUploadTier: vi.fn(),
     mockCheckUploadQuota: vi.fn(),
-    mockRecordUploadAnalysis: vi.fn(),
+    mockWaitUntil: vi.fn(),
+    mockRunAnalyzeJob: vi.fn(),
   };
 });
 
@@ -36,7 +46,8 @@ vi.mock('@/auth', () => ({ auth: mockAuth }));
 
 vi.mock('@/lib/db', () => ({
   db: { insert: mockInsert },
-  tracks: { id: 'mock_id_column' },
+  analyzeJobs: { id: 'mock_analyze_jobs_id_column' },
+  tracks: { id: 'mock_tracks_id_column' },
 }));
 
 vi.mock('@/lib/rate-limit', async () => {
@@ -52,22 +63,14 @@ vi.mock('@/lib/rate-limit', async () => {
 vi.mock('@/lib/upload-quota', () => ({
   resolveUploadTier: mockResolveUploadTier,
   checkUploadQuota: mockCheckUploadQuota,
-  recordUploadAnalysis: mockRecordUploadAnalysis,
+  recordUploadAnalysis: vi.fn(),
 }));
 
-import { POST } from './route';
+vi.mock('@vercel/functions', () => ({ waitUntil: mockWaitUntil }));
 
-const WORKER_OK_BODY = {
-  bpm: 120,
-  duration: 180,
-  sampleRate: 44100,
-  suggestedSections: [
-    { id: 's1', name: 'Intro', bars: 4 },
-    { id: 's2', name: 'Verse', bars: 16 },
-    { id: 's3', name: 'Chorus', bars: 16 },
-    { id: 's4', name: 'Outro', bars: 4 },
-  ],
-};
+vi.mock('@/lib/analyze-jobs', () => ({ runAnalyzeJob: mockRunAnalyzeJob }));
+
+import { POST } from './route';
 
 function makeAudioFile(
   name = 'song.wav',
@@ -78,357 +81,109 @@ function makeAudioFile(
   return new File([buf], name, { type });
 }
 
-function makeFormRequest(
-  formData: FormData,
-  headers: Record<string, string> = {},
-): NextRequest {
+function makeRequest(file: File | null, ip = '203.0.113.10'): NextRequest {
+  const form = new FormData();
+  if (file) form.append('file', file);
   return new NextRequest('https://example.test/api/tracks/analyze', {
     method: 'POST',
-    body: formData,
-    headers: {
-      'x-forwarded-for': '203.0.113.5',
-      ...headers,
-    },
+    body: form,
+    headers: { 'x-forwarded-for': ip },
   });
 }
 
-describe('POST /api/tracks/analyze', () => {
-  const originalDbUrl = process.env.DATABASE_URL;
-  const originalSalt = process.env.RATE_LIMIT_IP_SALT;
-  const originalWorkerUrl = process.env.AUDIO_WORKER_URL;
-  const originalWorkerSecret = process.env.AUDIO_WORKER_SHARED_SECRET;
-  const originalPaywall = process.env.ENABLE_ANALYZE_PAYWALL;
-  let fetchSpy: ReturnType<typeof vi.spyOn>;
-
+describe('POST /api/tracks/analyze (async)', () => {
   beforeEach(() => {
-    mockAuth.mockReset();
-    mockReturning.mockReset();
-    mockValues.mockClear();
-    mockInsert.mockClear();
-    mockCheckAndRecord.mockReset();
-    mockResolveUploadTier.mockReset();
-    mockCheckUploadQuota.mockReset();
-    mockRecordUploadAnalysis.mockReset();
-
-    process.env.DATABASE_URL = 'postgres://mock';
-    process.env.RATE_LIMIT_IP_SALT = 'test-salt';
+    vi.resetAllMocks();
     process.env.AUDIO_WORKER_URL = 'https://worker.example';
-    process.env.AUDIO_WORKER_SHARED_SECRET = 'test-secret';
+    process.env.AUDIO_WORKER_SHARED_SECRET = 'shh';
+    process.env.DATABASE_URL = 'postgres://stub';
+    process.env.RATE_LIMIT_IP_SALT = 'salt';
     delete process.env.ENABLE_ANALYZE_PAYWALL;
 
     mockAuth.mockResolvedValue(null);
+    mockCheckAndRecord.mockResolvedValue({ allowed: true, current: 1, limit: 50 });
+    mockResolveUploadTier.mockResolvedValue('anon');
+    mockCheckUploadQuota.mockResolvedValue({ allowed: true, used: 0, limit: 1 });
+    mockReturning.mockResolvedValue([{ id: 'job-abc-123' }]);
+    mockRunAnalyzeJob.mockResolvedValue(undefined);
+  });
+
+  it('returns 202 + jobId on the happy path', async () => {
+    const res = await POST(makeRequest(makeAudioFile()));
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    expect(body.jobId).toBe('job-abc-123');
+    expect(body.status).toBe('queued');
+    expect(body.statusUrl).toBe('/api/tracks/analyze/jobs/job-abc-123');
+    expect(mockWaitUntil).toHaveBeenCalledTimes(1);
+    expect(mockRunAnalyzeJob).toHaveBeenCalledTimes(1);
+    const runArgs = mockRunAnalyzeJob.mock.calls[0]?.[0];
+    expect(runArgs?.jobId).toBe('job-abc-123');
+    expect(runArgs?.method).toBe('template');
+    expect(runArgs?.mime).toBe('audio/wav');
+    expect(runArgs?.identifier).toMatch(/^ip:/);
+  });
+
+  it('returns 400 when no file is supplied', async () => {
+    const res = await POST(makeRequest(null));
+    expect(res.status).toBe(400);
+    expect(mockWaitUntil).not.toHaveBeenCalled();
+  });
+
+  it('returns 413 when the file exceeds 50 MB', async () => {
+    const big = makeAudioFile('big.wav', 'audio/wav', 51 * 1024 * 1024);
+    const res = await POST(makeRequest(big));
+    expect(res.status).toBe(413);
+    expect(mockWaitUntil).not.toHaveBeenCalled();
+  });
+
+  it('returns 415 on unsupported mime + extension', async () => {
+    const res = await POST(makeRequest(makeAudioFile('song.flac', 'audio/flac')));
+    expect(res.status).toBe(415);
+    expect(mockWaitUntil).not.toHaveBeenCalled();
+  });
+
+  it('returns 429 when the rate limiter rejects', async () => {
     mockCheckAndRecord.mockResolvedValue({
-      allowed: true,
-      limit: 5,
-      current: 1,
-      retryAfterSeconds: null,
+      allowed: false,
+      current: 50,
+      limit: 50,
+      retryAfterSeconds: 1800,
     });
-    mockResolveUploadTier.mockResolvedValue('free');
-    mockCheckUploadQuota.mockResolvedValue({
-      allowed: true,
-      tier: 'free',
-      used: 0,
-      limit: 1,
-    });
-    mockRecordUploadAnalysis.mockResolvedValue(undefined);
-    mockReturning.mockResolvedValue([{ id: 'fake-uuid' }]);
-
-    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify(WORKER_OK_BODY), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
+    const res = await POST(makeRequest(makeAudioFile()));
+    expect(res.status).toBe(429);
+    expect(mockWaitUntil).not.toHaveBeenCalled();
   });
 
-  afterEach(() => {
-    fetchSpy.mockRestore();
-    if (originalDbUrl === undefined) delete process.env.DATABASE_URL;
-    else process.env.DATABASE_URL = originalDbUrl;
-    if (originalSalt === undefined) delete process.env.RATE_LIMIT_IP_SALT;
-    else process.env.RATE_LIMIT_IP_SALT = originalSalt;
-    if (originalWorkerUrl === undefined) delete process.env.AUDIO_WORKER_URL;
-    else process.env.AUDIO_WORKER_URL = originalWorkerUrl;
-    if (originalWorkerSecret === undefined) delete process.env.AUDIO_WORKER_SHARED_SECRET;
-    else process.env.AUDIO_WORKER_SHARED_SECRET = originalWorkerSecret;
-    if (originalPaywall === undefined) delete process.env.ENABLE_ANALYZE_PAYWALL;
-    else process.env.ENABLE_ANALYZE_PAYWALL = originalPaywall;
+  it('returns 402 when paywall is enabled and quota is exhausted', async () => {
+    process.env.ENABLE_ANALYZE_PAYWALL = 'true';
+    mockCheckUploadQuota.mockResolvedValue({ allowed: false, used: 1, limit: 1 });
+    const res = await POST(makeRequest(makeAudioFile()));
+    expect(res.status).toBe(402);
+    const body = await res.json();
+    expect(body.code).toBe('UPLOAD_QUOTA_EXCEEDED');
+    expect(mockWaitUntil).not.toHaveBeenCalled();
   });
 
-  describe('validation', () => {
-    it('returns 400 when the file field is missing', async () => {
-      const fd = new FormData();
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('Missing file');
-    });
-
-    it('returns 400 when the file is empty', async () => {
-      const fd = new FormData();
-      fd.append('file', makeAudioFile('song.wav', 'audio/wav', 0));
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('Empty file');
-    });
-
-    it('returns 400 with FILE_TOO_LARGE when file exceeds 50MB', async () => {
-      const fd = new FormData();
-      fd.append(
-        'file',
-        makeAudioFile('big.wav', 'audio/wav', 51 * 1024 * 1024),
-      );
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.code).toBe('FILE_TOO_LARGE');
-    });
-
-    it('returns 400 with INVALID_MIME when type and extension are both wrong', async () => {
-      const fd = new FormData();
-      fd.append('file', makeAudioFile('song.flac', 'audio/flac'));
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.code).toBe('INVALID_MIME');
-    });
-
-    it('accepts a file by extension when the browser sends application/octet-stream', async () => {
-      const fd = new FormData();
-      fd.append('file', makeAudioFile('song.mp3', 'application/octet-stream'));
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(200);
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-      const [, init] = fetchSpy.mock.calls[0]!;
-      expect((init as RequestInit).headers).toMatchObject({
-        'content-type': 'audio/mpeg',
-      });
-    });
+  it('returns 503 when worker env vars are missing', async () => {
+    delete process.env.AUDIO_WORKER_URL;
+    const res = await POST(makeRequest(makeAudioFile()));
+    expect(res.status).toBe(503);
+    expect(mockWaitUntil).not.toHaveBeenCalled();
   });
 
-  describe('environment guards', () => {
-    it('returns 503 when AUDIO_WORKER_URL is unset', async () => {
-      delete process.env.AUDIO_WORKER_URL;
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(503);
-      const body = await res.json();
-      expect(body.error).toBe('Audio analysis is not configured');
-    });
-
-    it('returns 400 when anon caller has no forwarded IP', async () => {
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      const req = new NextRequest('https://example.test/api/tracks/analyze', {
-        method: 'POST',
-        body: fd,
-      });
-      const res = await POST(req);
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toBe('Cannot determine client identifier');
-    });
+  it('returns 500 when the DB insert returns no rows', async () => {
+    mockReturning.mockResolvedValue([]);
+    const res = await POST(makeRequest(makeAudioFile()));
+    expect(res.status).toBe(500);
+    expect(mockWaitUntil).not.toHaveBeenCalled();
   });
 
-  describe('rate limiting', () => {
-    it('uses user:<id> identifier for authenticated callers', async () => {
-      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      await POST(makeFormRequest(fd));
-      expect(mockCheckAndRecord).toHaveBeenCalledWith('user:user-abc', 'auth');
-    });
-
-    it('returns 429 with authBoost true for anon over-limit', async () => {
-      mockCheckAndRecord.mockResolvedValue({
-        allowed: false,
-        limit: 5,
-        current: 5,
-        retryAfterSeconds: 1800,
-      });
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(429);
-      const body = await res.json();
-      expect(body.code).toBe('RATE_LIMITED');
-      expect(body.authBoost).toBe(true);
-    });
-  });
-
-  describe('worker error mapping', () => {
-    it('returns 422 DECODE_FAILED when worker rejects the audio', async () => {
-      fetchSpy.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ error: 'decode_failed', detail: 'bad mpeg sync' }),
-          { status: 422, headers: { 'content-type': 'application/json' } },
-        ),
-      );
-      const fd = new FormData();
-      fd.append('file', makeAudioFile('weird.mp3', 'audio/mpeg'));
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(422);
-      const body = await res.json();
-      expect(body.code).toBe('DECODE_FAILED');
-      expect(body.details).toBe('bad mpeg sync');
-    });
-
-    it('returns 502 when the worker returns a 5xx', async () => {
-      fetchSpy.mockResolvedValueOnce(
-        new Response('boom', { status: 500 }),
-      );
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(502);
-    });
-
-    it('returns 502 when fetch throws', async () => {
-      fetchSpy.mockRejectedValueOnce(new TypeError('network down'));
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(502);
-    });
-  });
-
-  describe('happy path', () => {
-    it('persists a draft track with status=rendering and returns id + worker results', async () => {
-      const fd = new FormData();
-      fd.append('file', makeAudioFile('My Song.wav', 'audio/wav'));
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(200);
-
-      const body = await res.json();
-      expect(body.id).toBe('fake-uuid');
-      expect(body.bpm).toBe(120);
-      expect(body.duration).toBe(180);
-      expect(body.suggestedSections).toHaveLength(4);
-
-      expect(mockInsert).toHaveBeenCalledTimes(1);
-      const insertedRow = (mockValues.mock.calls[0] as unknown as [
-        Record<string, unknown>,
-      ])[0];
-      expect(insertedRow.title).toBe('My Song');
-      expect(insertedRow.status).toBe('rendering');
-      expect(insertedRow.previewUrl).toBeNull();
-      expect(insertedRow.fullUrl).toBeNull();
-      expect(insertedRow.duration).toBe(180);
-      const spec = insertedRow.spec as Record<string, unknown>;
-      expect(spec.bpm).toBe(120);
-      expect(spec.sections).toHaveLength(4);
-      expect(spec.voiceId).toBe('en-US-Standard-D');
-    });
-
-    it('attributes the row to the userId when authenticated', async () => {
-      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      await POST(makeFormRequest(fd));
-      const insertedRow = (mockValues.mock.calls[0] as unknown as [
-        Record<string, unknown>,
-      ])[0];
-      expect(insertedRow.userId).toBe('user-abc');
-    });
-
-    it('forwards the audio bytes to the worker with the secret header', async () => {
-      const fd = new FormData();
-      fd.append('file', makeAudioFile('clip.mp3', 'audio/mpeg'));
-      await POST(makeFormRequest(fd));
-      const [url, init] = fetchSpy.mock.calls[0]!;
-      expect(url).toBe('https://worker.example/analyze');
-      const headers = (init as RequestInit).headers as Record<string, string>;
-      expect(headers['x-worker-secret']).toBe('test-secret');
-      expect(headers['content-type']).toBe('audio/mpeg');
-    });
-  });
-
-  describe('persistence failure', () => {
-    it('returns 500 when insert throws', async () => {
-      mockReturning.mockRejectedValue(new Error('db down'));
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(500);
-      const body = await res.json();
-      expect(body.error).toBe('Track persistence failed');
-    });
-  });
-
-  describe('upload quota (Phase C)', () => {
-    it('records the analysis identifier on success', async () => {
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      await POST(makeFormRequest(fd));
-      expect(mockRecordUploadAnalysis).toHaveBeenCalledTimes(1);
-      const [identifier, trackId] = mockRecordUploadAnalysis.mock.calls[0]!;
-      expect(identifier).toMatch(/^ip:[0-9a-f]{64}$/);
-      expect(trackId).toBe('fake-uuid');
-    });
-
-    it('does NOT block when ENABLE_ANALYZE_PAYWALL is unset even if quota is exceeded', async () => {
-      mockCheckUploadQuota.mockResolvedValue({
-        allowed: false,
-        tier: 'free',
-        used: 1,
-        limit: 1,
-      });
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(200);
-    });
-
-    it('returns 402 UPLOAD_QUOTA_EXCEEDED when paywall is enabled and quota exceeded', async () => {
-      process.env.ENABLE_ANALYZE_PAYWALL = 'true';
-      mockCheckUploadQuota.mockResolvedValue({
-        allowed: false,
-        tier: 'free',
-        used: 1,
-        limit: 1,
-      });
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(402);
-      const body = await res.json();
-      expect(body.code).toBe('UPLOAD_QUOTA_EXCEEDED');
-      expect(body.requiredTier).toBe('paid');
-      expect(body.details.used).toBe(1);
-      expect(body.details.limit).toBe(1);
-      // No record should be written when the gate fires before analysis.
-      expect(mockRecordUploadAnalysis).not.toHaveBeenCalled();
-    });
-
-    it('skips the gate for paid tier even when paywall is enabled', async () => {
-      process.env.ENABLE_ANALYZE_PAYWALL = 'true';
-      mockResolveUploadTier.mockResolvedValue('paid');
-      mockCheckUploadQuota.mockResolvedValue({
-        allowed: true,
-        tier: 'paid',
-        used: 50,
-        limit: null,
-      });
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      const res = await POST(makeFormRequest(fd));
-      expect(res.status).toBe(200);
-    });
-
-    it('checks BOTH user:id and ip:hash for auth callers', async () => {
-      process.env.ENABLE_ANALYZE_PAYWALL = 'true';
-      mockAuth.mockResolvedValue({ user: { id: 'user-abc' } });
-      const fd = new FormData();
-      fd.append('file', makeAudioFile());
-      await POST(makeFormRequest(fd));
-      expect(mockCheckUploadQuota).toHaveBeenCalledTimes(1);
-      const [identifiers] = mockCheckUploadQuota.mock.calls[0]!;
-      expect(identifiers).toEqual([
-        'user:user-abc',
-        expect.stringMatching(/^ip:[0-9a-f]{64}$/),
-      ]);
-    });
+  it('uses user:<id> identifier when the caller is authenticated', async () => {
+    mockAuth.mockResolvedValue({ user: { id: 'u-42' } });
+    await POST(makeRequest(makeAudioFile()));
+    const runArgs = mockRunAnalyzeJob.mock.calls[0]?.[0];
+    expect(runArgs?.identifier).toBe('user:u-42');
+    expect(runArgs?.userId).toBe('u-42');
   });
 });

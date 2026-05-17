@@ -35,6 +35,19 @@ export const subscriptionStatusEnum = pgEnum('subscription_status', [
   'canceled',
 ]);
 
+export const analyzeJobStatusEnum = pgEnum('analyze_job_status', [
+  'queued',
+  'running',
+  'done',
+  'failed',
+]);
+
+export const analyzeMethodEnum = pgEnum('analyze_method', [
+  'template',
+  'foote',
+  'ml',
+]);
+
 // --- Tables ---
 
 export const tracks = pgTable('tracks', {
@@ -211,6 +224,66 @@ export const ttsCache = pgTable('tts_cache', {
     .defaultNow(),
 });
 
+// --- Async analyze jobs (Phase D) ---
+
+/**
+ * Async pipeline for /api/tracks/analyze. The Vercel route inserts a row
+ * here at status='queued' and returns 202 + jobId, then runs the actual
+ * worker call in the background via @vercel/functions' waitUntil. The
+ * client polls GET /api/tracks/analyze/jobs/[id] until status='done' or
+ * 'failed' and reads the resulting trackId from result.
+ *
+ * Why async: the ML-Python worker (PR-C) has a 30-60s cold start that
+ * can exceed Vercel's 60s function timeout when added to inference time.
+ * The Foote and template paths complete in seconds, but go through the
+ * same pipeline for consistency.
+ *
+ * Identifier scheme mirrors rate_limits / upload_analyses. GET on this
+ * table is guarded by the same identifier so callers only see their own
+ * jobs.
+ *
+ * result jsonb shape (when status='done'):
+ *   { trackId, bpm, duration, sampleRate, suggestedSections, method }
+ *
+ * No migration file; created via drizzle-kit push together with
+ * upload_analyses (Phase C) and analyze_outcomes (Phase D PR-D).
+ */
+export interface AnalyzeJobResult {
+  trackId: string;
+  bpm: number;
+  duration: number;
+  sampleRate: number;
+  suggestedSections: Array<{ id: string; name: string; bars: number }>;
+  method: 'template' | 'foote' | 'ml';
+}
+
+export const analyzeJobs = pgTable(
+  'analyze_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    identifier: text('identifier').notNull(),
+    method: analyzeMethodEnum('method').notNull(),
+    status: analyzeJobStatusEnum('status').notNull().default('queued'),
+    audioSizeBytes: integer('audio_size_bytes').notNull(),
+    mime: text('mime').notNull(),
+    title: text('title').notNull(),
+    result: jsonb('result').$type<AnalyzeJobResult>(),
+    errorText: text('error_text'),
+    trackId: uuid('track_id').references(() => tracks.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (table) => ({
+    identifierStatusIdx: index('analyze_jobs_identifier_status_idx').on(
+      table.identifier,
+      table.status,
+    ),
+  }),
+);
+
 // --- Inferred types ---
 
 export type Track = typeof tracks.$inferSelect;
@@ -233,6 +306,9 @@ export type NewSession = typeof sessions.$inferInsert;
 
 export type VerificationToken = typeof verificationTokens.$inferSelect;
 export type NewVerificationToken = typeof verificationTokens.$inferInsert;
+
+export type AnalyzeJob = typeof analyzeJobs.$inferSelect;
+export type NewAnalyzeJob = typeof analyzeJobs.$inferInsert;
 
 export type RateLimit = typeof rateLimits.$inferSelect;
 export type NewRateLimit = typeof rateLimits.$inferInsert;
