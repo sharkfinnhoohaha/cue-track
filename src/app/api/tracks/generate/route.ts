@@ -460,6 +460,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // --- Phase D measurement: record outcome for the A/B scorecard ----
+    // Only meaningful on the UPDATE path (finalizing a draft created by
+    // /api/tracks/analyze). On INSERT (manual mode) there is no
+    // analyze_jobs row to compare against; the helper no-ops in that case.
+    if (existingTrackId) {
+      const { recordAnalyzeOutcome } = await import('@/lib/analyze-outcomes');
+      // Fire-and-forget; the helper logs failures and never throws.
+      void recordAnalyzeOutcome(saved.id, spec.sections);
+    }
+
     return NextResponse.json({
       id: saved.id,
       previewUrl: saved.previewUrl ?? previewUrl,

@@ -8,7 +8,7 @@ import {
   resolveUploadTier,
 } from '@/lib/upload-quota';
 import { runAnalyzeJob } from '@/lib/analyze-jobs';
-import type { AnalyzeMethod } from '@/lib/analyze-jobs';
+import { pickMethod, workerForMethod } from '@/lib/analyze-router';
 
 export const maxDuration = 60;
 export const runtime = 'nodejs';
@@ -53,9 +53,6 @@ function normalizeMime(mime: string, filename: string): string | null {
   return null;
 }
 
-function pickMethod(): AnalyzeMethod {
-  return 'template';
-}
 
 export async function POST(request: NextRequest) {
   // --- Parse multipart form ---------------------------------------------
@@ -181,20 +178,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // --- Worker config sanity check (fail fast before enqueue) ------------
-  const workerUrl = process.env.AUDIO_WORKER_URL;
-  const workerSecret = process.env.AUDIO_WORKER_SHARED_SECRET;
-  if (!workerUrl || !workerSecret) {
-    return NextResponse.json(
-      {
-        error: 'Audio analysis is not configured',
-        details:
-          'AUDIO_WORKER_URL and AUDIO_WORKER_SHARED_SECRET must be set.',
-      },
-      { status: 503 },
-    );
-  }
-
   if (!process.env.DATABASE_URL) {
     return NextResponse.json(
       {
@@ -202,6 +185,29 @@ export async function POST(request: NextRequest) {
         details: 'DATABASE_URL is required.',
       },
       { status: 500 },
+    );
+  }
+
+  // --- Pick detector via A/B router + resolve worker URL/secret ---------
+  const requestUrl = new URL(request.url);
+  let method = pickMethod({ identifier: rateIdentifier, url: requestUrl });
+  let workerCfg = workerForMethod(method);
+  // If the router picked ML but its env is missing, fall through to Foote.
+  // Lets us merge router code before the ML worker exists in prod.
+  if (method === 'ml' && (!workerCfg.url || !workerCfg.secret)) {
+    method = 'foote';
+    workerCfg = workerForMethod(method);
+  }
+  // Final guard: the Foote/template path must have the Node worker
+  // configured. Without it, analyze cannot run at all.
+  if (!workerCfg.url || !workerCfg.secret) {
+    return NextResponse.json(
+      {
+        error: 'Audio analysis is not configured',
+        details:
+          'AUDIO_WORKER_URL and AUDIO_WORKER_SHARED_SECRET must be set.',
+      },
+      { status: 503 },
     );
   }
 
@@ -220,7 +226,6 @@ export async function POST(request: NextRequest) {
   }
 
   const title = stripExtension(file.name);
-  const method = pickMethod();
 
   const { db, analyzeJobs } = await import('@/lib/db');
   let jobId: string;
@@ -267,8 +272,9 @@ export async function POST(request: NextRequest) {
       method,
       identifier: rateIdentifier,
       userId,
-      workerUrl,
-      workerSecret,
+      workerUrl: workerCfg.url,
+      workerSecret: workerCfg.secret,
+      workerPath: workerCfg.path,
     }),
   );
 
