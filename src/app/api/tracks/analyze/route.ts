@@ -1,34 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
+import { waitUntil } from '@vercel/functions';
 import type { SongSpec } from '@/types';
 import { auth } from '@/auth';
 import { checkAndRecordRateLimit, getClientIpHash } from '@/lib/rate-limit';
 import {
   checkUploadQuota,
-  recordUploadAnalysis,
   resolveUploadTier,
 } from '@/lib/upload-quota';
+import { runAnalyzeJob } from '@/lib/analyze-jobs';
+import { pickMethod, workerForMethod } from '@/lib/analyze-router';
 
 export const maxDuration = 60;
 export const runtime = 'nodejs';
 
 // ---------------------------------------------------------------------------
-// POST /api/tracks/analyze
+// POST /api/tracks/analyze (Phase D async)
 // ---------------------------------------------------------------------------
 //
-// Accepts a multipart/form-data POST with a single audio file under the
-// "file" field (MP3 or WAV, <= 50 MB). Forwards the raw bytes to the
-// Cloud Run worker's POST /analyze endpoint, which decodes the audio,
-// runs music-tempo for BPM, and returns a suggested SongSpec template.
+// Accepts multipart/form-data with a "file" field (MP3 or WAV, <= 50 MB),
+// validates the upload + quota, then enqueues an analyze_jobs row and
+// returns 202 + { jobId, statusUrl }. The actual worker call runs in
+// the background via @vercel/functions waitUntil; the client polls
+// GET /api/tracks/analyze/jobs/[id] for { status, result, error }.
 //
-// On success, persists a draft tracks row with status='rendering' and the
-// suggested spec, then returns { id } so the client can navigate to
-// /tracks/[id]/review for user adjustment. The user finalizes by submitting
-// the (possibly edited) spec to /api/tracks/generate with existingTrackId
-// set, which flips the row to status='ready'.
+// When the job completes the worker, the background pipeline inserts a
+// draft tracks row (status='rendering', spec derived from worker output)
+// and writes its id into analyze_jobs.result.trackId so the client can
+// navigate to /tracks/[id]/review.
 //
-// Phase C paywall: ENABLE_ANALYZE_PAYWALL gates the 1-free-use cap. Left as
-// a no-op in V1; the flag stays unset in production until C ships.
+// Method selection: hard-coded to 'template' here in PR-B. PR-D introduces
+// the A/B router that picks 'foote' or 'ml' per caller-stable hash.
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const ACCEPTED_MIMES = new Set([
@@ -40,13 +41,6 @@ const ACCEPTED_MIMES = new Set([
   'audio/vnd.wave',
 ]);
 
-interface WorkerAnalyzeResponse {
-  bpm: number;
-  duration: number;
-  sampleRate: number;
-  suggestedSections: Array<{ id: string; name: string; bars: number }>;
-}
-
 function stripExtension(name: string): string {
   return name.replace(/\.[^./\\]+$/, '').trim() || 'Untitled track';
 }
@@ -54,34 +48,11 @@ function stripExtension(name: string): string {
 function normalizeMime(mime: string, filename: string): string | null {
   const base = mime.toLowerCase().split(';')[0].trim();
   if (ACCEPTED_MIMES.has(base)) return base;
-  // Fallback: some browsers send audio/octet-stream or empty for drag-drop.
-  // Honor the file extension as a last resort.
   if (/\.mp3$/i.test(filename)) return 'audio/mpeg';
   if (/\.wav$/i.test(filename)) return 'audio/wav';
   return null;
 }
 
-function buildSuggestedSpec(
-  title: string,
-  worker: WorkerAnalyzeResponse,
-): SongSpec {
-  return {
-    title,
-    bpm: worker.bpm,
-    timeSignature: { beats: 4, subdivision: 4 },
-    sections: worker.suggestedSections,
-    // Standard voice is the free default; users on the review screen can
-    // swap to a Studio voice (the voice-tier gate fires on /generate, not
-    // here, so the suggestion is voice-tier-agnostic).
-    voiceId: 'en-US-Standard-D',
-    clickSound: 'classic',
-    format: 'wav',
-    enableCountIn: true,
-    enableSectionAnnounce: true,
-    enableBarCountdown: false,
-    countInBars: 2,
-  };
-}
 
 export async function POST(request: NextRequest) {
   // --- Parse multipart form ---------------------------------------------
@@ -117,10 +88,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'File too large',
-        code: 'FILE_TOO_LARGE',
-        details: `File is ${file.size} bytes; maximum is ${MAX_FILE_BYTES} bytes (50 MB)`,
+        details: `Max ${MAX_FILE_BYTES} bytes (${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB). Got ${file.size}.`,
       },
-      { status: 400 },
+      { status: 413 },
     );
   }
 
@@ -129,23 +99,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Unsupported file type',
-        code: 'INVALID_MIME',
-        details: `Got ${file.type || '(empty)'}; expected MP3 or WAV`,
+        details: `Expected MP3 or WAV. Got mime="${file.type}", filename="${file.name}".`,
       },
-      { status: 400 },
+      { status: 415 },
     );
   }
 
   // --- Identify caller --------------------------------------------------
   const session = await auth();
   const userId = session?.user?.id ?? null;
-  const ipHash = getClientIpHash(request);
   let rateIdentifier: string;
   let rateKind: 'auth' | 'anon';
   if (userId) {
     rateIdentifier = `user:${userId}`;
     rateKind = 'auth';
   } else {
+    const ipHash = getClientIpHash(request);
     if (!ipHash) {
       return NextResponse.json(
         {
@@ -160,12 +129,9 @@ export async function POST(request: NextRequest) {
     rateKind = 'anon';
   }
 
-  // Identifier set used for the upload-quota check. Auth callers count
-  // both their userId AND their current IP hash so signing up does not
-  // silently reset the free cap; anon callers count only their IP hash.
-  const quotaIdentifiers: string[] = userId
-    ? [`user:${userId}`, ...(ipHash ? [`ip:${ipHash}`] : [])]
-    : [`ip:${ipHash!}`];
+  const quotaIdentifiers = userId
+    ? [`user:${userId}`, ...(getClientIpHash(request) ? [`ip:${getClientIpHash(request)}`] : [])]
+    : [rateIdentifier];
 
   // --- Rate limit (shared with /generate quota) -------------------------
   const rate = await checkAndRecordRateLimit(rateIdentifier, rateKind);
@@ -191,12 +157,6 @@ export async function POST(request: NextRequest) {
   }
 
   // --- Upload quota gate (Phase C) -------------------------------------
-  // The gate stays dormant in production until ENABLE_ANALYZE_PAYWALL=true
-  // is set on Vercel. When enforcement is on, anon callers get exactly one
-  // free analysis (tracked by salted IP hash); auth users without an
-  // active Pro subscription get the same one (their userId and their IP
-  // are both checked so a sign-up does not reset the cap). Paid users
-  // (active or past-due Pro subscription) skip the gate entirely.
   const tier = await resolveUploadTier(userId);
   const quota = await checkUploadQuota(quotaIdentifiers, tier);
   if (
@@ -218,107 +178,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // --- Forward to worker ------------------------------------------------
-  const workerUrl = process.env.AUDIO_WORKER_URL;
-  const workerSecret = process.env.AUDIO_WORKER_SHARED_SECRET;
-  if (!workerUrl || !workerSecret) {
-    return NextResponse.json(
-      {
-        error: 'Audio analysis is not configured',
-        details:
-          'AUDIO_WORKER_URL and AUDIO_WORKER_SHARED_SECRET must be set.',
-      },
-      { status: 503 },
-    );
-  }
-
-  const audioBytes = await file.arrayBuffer();
-
-  const controller = new AbortController();
-  const timeoutMs = 55_000;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  let workerResponse: Response;
-  try {
-    workerResponse = await fetch(`${workerUrl}/analyze`, {
-      method: 'POST',
-      headers: {
-        'content-type': mime,
-        'x-worker-secret': workerSecret,
-      },
-      body: audioBytes,
-      signal: controller.signal,
-    });
-  } catch (err) {
-    clearTimeout(timeoutId);
-    const aborted = err instanceof Error && err.name === 'AbortError';
-    return NextResponse.json(
-      {
-        error: aborted ? 'Analysis timed out' : 'Audio worker unreachable',
-        details: err instanceof Error ? err.message : 'Unknown fetch error',
-      },
-      { status: aborted ? 504 : 502 },
-    );
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  if (workerResponse.status === 415 || workerResponse.status === 422) {
-    let detail = 'Worker could not decode the audio file';
-    try {
-      const body = (await workerResponse.json()) as { detail?: string };
-      if (typeof body?.detail === 'string') detail = body.detail;
-    } catch {
-      // ignore body parse errors
-    }
-    return NextResponse.json(
-      {
-        error: 'Could not analyze this file',
-        code: 'DECODE_FAILED',
-        details: detail,
-      },
-      { status: 422 },
-    );
-  }
-
-  if (!workerResponse.ok) {
-    return NextResponse.json(
-      {
-        error: 'Audio worker error',
-        details: `Worker returned ${workerResponse.status}`,
-      },
-      { status: 502 },
-    );
-  }
-
-  let workerBody: WorkerAnalyzeResponse;
-  try {
-    workerBody = (await workerResponse.json()) as WorkerAnalyzeResponse;
-  } catch (err) {
-    return NextResponse.json(
-      {
-        error: 'Worker returned invalid JSON',
-        details: err instanceof Error ? err.message : 'Parse error',
-      },
-      { status: 502 },
-    );
-  }
-
-  if (
-    typeof workerBody.bpm !== 'number' ||
-    typeof workerBody.duration !== 'number' ||
-    !Array.isArray(workerBody.suggestedSections)
-  ) {
-    return NextResponse.json(
-      {
-        error: 'Worker returned malformed payload',
-        details: 'Missing bpm, duration, or suggestedSections',
-      },
-      { status: 502 },
-    );
-  }
-
-  // --- Persist draft track row -----------------------------------------
   if (!process.env.DATABASE_URL) {
     return NextResponse.json(
       {
@@ -329,59 +188,126 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const trackId = crypto.randomUUID();
-  const title = stripExtension(file.name);
-  const suggestedSpec = buildSuggestedSpec(title, workerBody);
-  const durationSec = Math.max(1, Math.round(workerBody.duration));
+  // --- Pick detector via A/B router + resolve worker URL/secret ---------
+  const requestUrl = new URL(request.url);
+  let method = pickMethod({ identifier: rateIdentifier, url: requestUrl });
+  let workerCfg = workerForMethod(method);
+  // If the router picked ML but its env is missing, fall through to Foote.
+  // Lets us merge router code before the ML worker exists in prod.
+  if (method === 'ml' && (!workerCfg.url || !workerCfg.secret)) {
+    method = 'foote';
+    workerCfg = workerForMethod(method);
+  }
+  // Final guard: the Foote/template path must have the Node worker
+  // configured. Without it, analyze cannot run at all.
+  if (!workerCfg.url || !workerCfg.secret) {
+    return NextResponse.json(
+      {
+        error: 'Audio analysis is not configured',
+        details:
+          'AUDIO_WORKER_URL and AUDIO_WORKER_SHARED_SECRET must be set.',
+      },
+      { status: 503 },
+    );
+  }
 
+  // --- Buffer the upload + enqueue the job ------------------------------
+  let audioBytes: ArrayBuffer;
   try {
-    const { db, tracks } = await import('@/lib/db');
-    const rows = await db
-      .insert(tracks)
-      .values({
-        id: trackId,
-        title,
-        spec: suggestedSpec,
-        status: 'rendering',
-        previewUrl: null,
-        fullUrl: null,
-        duration: durationSec,
-        userId: userId ?? undefined,
-      })
-      .returning({ id: tracks.id });
+    audioBytes = await file.arrayBuffer();
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: 'Could not read upload',
+        details: err instanceof Error ? err.message : 'Unknown read error',
+      },
+      { status: 400 },
+    );
+  }
 
-    const saved = rows[0];
-    if (!saved) {
+  const title = stripExtension(file.name);
+
+  const { db, analyzeJobs } = await import('@/lib/db');
+  let jobId: string;
+  try {
+    const rows = await db
+      .insert(analyzeJobs)
+      .values({
+        identifier: rateIdentifier,
+        method,
+        status: 'queued',
+        audioSizeBytes: file.size,
+        mime,
+        title,
+      })
+      .returning({ id: analyzeJobs.id });
+    if (!rows[0]) {
       return NextResponse.json(
         {
-          error: 'Track persistence failed',
+          error: 'Job persistence failed',
           details: 'Insert returned no rows',
         },
         { status: 500 },
       );
     }
-
-    // Record the analysis for quota accounting. Best-effort; a failure
-    // here is logged but does not fail the route — the worker work is
-    // already done and the user should not be punished for our DB
-    // outage. The next call will re-check the quota against whatever
-    // rows did make it in.
-    await recordUploadAnalysis(rateIdentifier, saved.id);
-
-    return NextResponse.json({
-      id: saved.id,
-      bpm: workerBody.bpm,
-      duration: workerBody.duration,
-      suggestedSections: workerBody.suggestedSections,
-    });
+    jobId = rows[0].id;
   } catch (err) {
-    console.error('[tracks/analyze] Persistence failed:', err);
+    console.error('[tracks/analyze] Job enqueue failed:', err);
     return NextResponse.json(
       {
-        error: 'Track persistence failed',
-        details: err instanceof Error ? err.message : 'Unknown error',
+        error: 'Job persistence failed',
+        details: err instanceof Error ? err.message : 'Unknown DB error',
       },
       { status: 500 },
     );
   }
+
+  // --- Kick off the background analysis ---------------------------------
+  waitUntil(
+    runAnalyzeJob({
+      jobId,
+      audioBytes: Buffer.from(audioBytes),
+      mime,
+      title,
+      method,
+      identifier: rateIdentifier,
+      userId,
+      workerUrl: workerCfg.url,
+      workerSecret: workerCfg.secret,
+      workerPath: workerCfg.path,
+    }),
+  );
+
+  return NextResponse.json(
+    {
+      jobId,
+      status: 'queued',
+      statusUrl: `/api/tracks/analyze/jobs/${jobId}`,
+    },
+    { status: 202 },
+  );
+}
+
+// Re-exported for tests that import buildSuggestedSpec.
+export function buildSuggestedSpec(
+  title: string,
+  worker: {
+    bpm: number;
+    duration: number;
+    suggestedSections: Array<{ id: string; name: string; bars: number }>;
+  },
+): SongSpec {
+  return {
+    title,
+    bpm: worker.bpm,
+    timeSignature: { beats: 4, subdivision: 4 },
+    sections: worker.suggestedSections,
+    voiceId: 'en-US-Standard-D',
+    clickSound: 'classic',
+    format: 'wav',
+    enableCountIn: true,
+    enableSectionAnnounce: true,
+    enableBarCountdown: true,
+    countInBars: 1,
+  };
 }

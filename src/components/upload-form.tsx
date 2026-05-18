@@ -21,10 +21,31 @@ import { cn } from '@/lib/cn';
 
 const ACCEPTED_MIME = 'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave';
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
+const POLL_INTERVAL_MS = 1500;
+const POLL_MAX_ATTEMPTS = 90;
 
 interface PaywallState {
   used: number;
   limit: number;
+}
+
+interface PolledJob {
+  status: 'queued' | 'running' | 'done' | 'failed';
+  result: unknown;
+  error: string | null;
+}
+
+async function pollAnalyzeJob(statusUrl: string): Promise<PolledJob> {
+  for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    const res = await fetch(statusUrl, { cache: 'no-store' });
+    if (!res.ok) {
+      throw new Error(`Status poll failed (${res.status})`);
+    }
+    const body = (await res.json()) as PolledJob;
+    if (body.status === 'done' || body.status === 'failed') return body;
+  }
+  throw new Error('Analyze timed out. Try again or pick a smaller file.');
 }
 
 export function UploadForm() {
@@ -84,12 +105,12 @@ export function UploadForm() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await fetch('/api/tracks/analyze', {
+      const enqueueRes = await fetch('/api/tracks/analyze', {
         method: 'POST',
         body: formData,
       });
 
-      if (!res.ok) {
+      if (!enqueueRes.ok) {
         let body: {
           error?: string;
           code?: string;
@@ -98,12 +119,12 @@ export function UploadForm() {
             | { used?: number; limit?: number; documentation?: string };
         } = {};
         try {
-          body = await res.json();
+          body = await enqueueRes.json();
         } catch {
           // ignore body parse errors; fall through to status-based message
         }
         if (
-          res.status === 402 &&
+          enqueueRes.status === 402 &&
           body.code === 'UPLOAD_QUOTA_EXCEEDED' &&
           body.details &&
           typeof body.details === 'object'
@@ -116,29 +137,44 @@ export function UploadForm() {
           setIsAnalyzing(false);
           return;
         }
-        if (res.status === 429) {
+        if (enqueueRes.status === 429) {
           throw new Error(
             (typeof body.details === 'string' ? body.details : null) ||
               body.error ||
               'Rate limit exceeded. Try again later.',
           );
         }
-        if (res.status === 422) {
+        if (enqueueRes.status === 415) {
           throw new Error(
             (typeof body.details === 'string' ? body.details : null) ||
-              "We couldn't decode that file. Try a different MP3 or WAV.",
+              "We can't read that file. Try a different MP3 or WAV.",
           );
         }
         throw new Error(
-          body.error || `Analysis failed (${res.status})`,
+          body.error || `Analysis failed (${enqueueRes.status})`,
         );
       }
 
-      const data = (await res.json()) as { id?: string };
-      if (!data.id) {
-        throw new Error('Analyze response did not include a track id');
+      const enqueueBody = (await enqueueRes.json()) as {
+        jobId?: string;
+        statusUrl?: string;
+      };
+      if (!enqueueBody.jobId || !enqueueBody.statusUrl) {
+        throw new Error('Analyze response did not include a jobId');
       }
-      router.push(`/tracks/${data.id}/review`);
+
+      const job = await pollAnalyzeJob(enqueueBody.statusUrl);
+      if (job.status === 'failed') {
+        throw new Error(job.error || "We couldn't analyze that file.");
+      }
+      const trackId =
+        job.status === 'done' && job.result && typeof job.result === 'object'
+          ? (job.result as { trackId?: string }).trackId
+          : undefined;
+      if (!trackId) {
+        throw new Error('Analyze finished without a track id');
+      }
+      router.push(`/tracks/${trackId}/review`);
     } catch (err) {
       setError(
         err instanceof Error
@@ -281,8 +317,8 @@ export function UploadForm() {
                   Analyzing your track...
                 </div>
                 <p className="text-[12px] text-[#6e6e73] max-w-[360px]">
-                  This usually takes 5 to 15 seconds depending on the length
-                  of your file.
+                  This takes 5 to 60 seconds depending on the song length and
+                  which detector you get.
                 </p>
               </div>
             ) : (
