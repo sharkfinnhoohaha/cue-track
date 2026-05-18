@@ -52,7 +52,7 @@ export function isSupportedMime(mime: string): 'wav' | 'mp3' | null {
   return null;
 }
 
-interface DecodedAudio {
+export interface DecodedAudio {
   monoSamples: Float32Array;
   sampleRate: number;
   duration: number;
@@ -113,7 +113,7 @@ async function decodeMp3(bytes: Buffer): Promise<DecodedAudio> {
   }
 }
 
-async function decodeAudio(bytes: Buffer, mime: string): Promise<DecodedAudio> {
+export async function decodeAudio(bytes: Buffer, mime: string): Promise<DecodedAudio> {
   const kind = isSupportedMime(mime);
   if (kind === 'wav') return decodeWav(bytes);
   if (kind === 'mp3') return decodeMp3(bytes);
@@ -123,7 +123,7 @@ async function decodeAudio(bytes: Buffer, mime: string): Promise<DecodedAudio> {
 const BPM_FLOOR = 60;
 const BPM_CEIL = 200;
 
-function detectBpm(samples: Float32Array, sampleRate: number): number {
+export function detectBpm(samples: Float32Array, sampleRate: number): number {
   if (samples.length < sampleRate * 2) {
     // Need at least ~2 seconds of audio for meaningful tempo detection.
     // Fall back to 120 as a neutral default.
@@ -133,8 +133,16 @@ function detectBpm(samples: Float32Array, sampleRate: number): number {
   // frames). If the source sampleRate differs significantly we scale hopSize
   // so frame timing stays at ~10ms; bufferSize stays at 2048 frames.
   const hopSize = Math.round(sampleRate / 100);
-  const mt = new MusicTempo(samples, { hopSize });
-  const raw = Number(mt.tempo);
+  let raw: number;
+  try {
+    const mt = new MusicTempo(samples, { hopSize });
+    raw = Number(mt.tempo);
+  } catch {
+    // music-tempo throws "Fail to find IOIs" when the input lacks onsets
+    // (drone, sustained chords, near-silence, pure sine). Fall back to a
+    // neutral default rather than 500-ing the analyze request.
+    return 120;
+  }
   if (!Number.isFinite(raw) || raw <= 0) return 120;
   // Octave-correct: nudge into the [BPM_FLOOR, BPM_CEIL] band by doubling /
   // halving. Music-tempo occasionally reports half-time or double-time.
