@@ -89,7 +89,7 @@ async function readJsonBody<T>(req: IncomingMessage, maxBytes = 1_000_000): Prom
 
 async function readRawBody(
   req: IncomingMessage,
-  maxBytes = 52 * 1024 * 1024,
+  maxBytes = 160 * 1024 * 1024,
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];

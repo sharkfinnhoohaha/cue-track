@@ -4,14 +4,17 @@ import React, { useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/cn';
+import { needsClientTranscode, transcodeToWav } from '@/lib/audio/client-decode';
 
 /**
  * Upload form — primary entry point for the Cue Track value prop.
  *
  * Flow:
- *   1. User drops or picks an MP3 / WAV (<= 50 MB)
- *   2. Click "Analyze track" → POST file to /api/tracks/analyze
- *   3. On success, navigate to /tracks/[id]/review so the user can adjust
+ *   1. User drops or picks an audio file (MP3, WAV, M4A, AAC, OGG, FLAC; <= 150 MB)
+ *   2. Non-MP3/WAV files are transcoded to WAV in the browser before upload
+ *      (see src/lib/audio/client-decode.ts)
+ *   3. Click "Analyze track" → POST file to /api/tracks/analyze
+ *   4. On success, navigate to /tracks/[id]/review so the user can adjust
  *      the detected BPM + suggested sections before finalizing.
  *
  * The route persists a draft tracks row (status='rendering') with the
@@ -19,8 +22,14 @@ import { cn } from '@/lib/cn';
  * /api/tracks/generate with existingTrackId to flip the row to ready.
  */
 
-const ACCEPTED_MIME = 'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave';
-const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
+// Browser-decoded formats (M4A, AAC, OGG, FLAC, …) are transcoded client-side
+// to WAV before upload so the server pipeline only needs MP3/WAV decoders.
+const ACCEPTED_MIME =
+  'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/wave,audio/mp4,audio/m4a,audio/x-m4a,audio/aac,audio/ogg,audio/flac,audio/x-flac';
+const ACCEPTED_EXT_RE = /\.(mp3|wav|m4a|mp4|aac|ogg|oga|flac)$/i;
+// 150 MB covers ~12 min of stereo 44.1 kHz/16-bit WAV, including transcoded
+// M4A uploads (browser-decoded WAV is ~10x the original M4A size).
+const MAX_FILE_BYTES = 150 * 1024 * 1024;
 const POLL_INTERVAL_MS = 1500;
 const POLL_MAX_ATTEMPTS = 90;
 
@@ -33,6 +42,34 @@ interface PolledJob {
   status: 'queued' | 'running' | 'done' | 'failed';
   result: unknown;
   error: string | null;
+}
+
+function friendlyWorkerError(raw: string | null): string {
+  const text = (raw ?? '').trim();
+  if (!text) return "We couldn't analyze that file. Try again or pick a different track.";
+  // Worker returned an HTTP status without a useful body — the user can't
+  // act on "Worker returned 502", so surface a recoverable message and
+  // keep the original detail in the console for debugging.
+  const statusOnly = /^Worker returned (\d+)$/i.exec(text);
+  if (statusOnly) {
+    console.error('[upload-form] Worker non-ok status:', text);
+    const status = Number(statusOnly[1]);
+    if (status === 415) return "We can't read that file. Try a different MP3 or WAV.";
+    if (status >= 500) return 'The audio analyzer is busy. Wait a moment and try again.';
+    return 'The audio analyzer rejected this file. Try a different track.';
+  }
+  // Decode errors from the worker's underlying MP3/WAV parser.
+  if (/decode/i.test(text) || /malformed/i.test(text)) {
+    console.error('[upload-form] Worker decode error:', text);
+    return "We couldn't decode that file. It may be corrupted — try a different MP3 or WAV.";
+  }
+  // Network / fetch failures bubble up as native error messages like
+  // "fetch failed" or "ECONNREFUSED ...".
+  if (/fetch failed|ECONN|ENOTFOUND|timed out|timeout/i.test(text)) {
+    console.error('[upload-form] Worker network error:', text);
+    return 'Could not reach the audio analyzer. Check your connection and try again.';
+  }
+  return text;
 }
 
 async function pollAnalyzeJob(statusUrl: string): Promise<PolledJob> {
@@ -55,16 +92,19 @@ export function UploadForm() {
   const [error, setError] = useState<string | null>(null);
   const [paywall, setPaywall] = useState<PaywallState | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isTranscoding, setIsTranscoding] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const acceptFile = useCallback((candidate: File | null) => {
     if (!candidate) return;
     if (candidate.size > MAX_FILE_BYTES) {
-      setError('File is over 50 MB. Trim or re-export at a lower bitrate.');
+      setError(
+        `File is over ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB. Trim or re-export at a lower bitrate.`,
+      );
       return;
     }
-    if (!/^audio\//.test(candidate.type) && !/\.(mp3|wav)$/i.test(candidate.name)) {
-      setError('Only MP3 or WAV files for now.');
+    if (!/^audio\//.test(candidate.type) && !ACCEPTED_EXT_RE.test(candidate.name)) {
+      setError('Audio files only. Try MP3, WAV, M4A, AAC, OGG, or FLAC.');
       return;
     }
     setError(null);
@@ -97,13 +137,37 @@ export function UploadForm() {
   }, []);
 
   const handleAnalyze = useCallback(async () => {
-    if (!file || isAnalyzing) return;
-    setIsAnalyzing(true);
+    if (!file || isAnalyzing || isTranscoding) return;
     setError(null);
     setPaywall(null);
+
+    let uploadFile = file;
+    if (needsClientTranscode(file)) {
+      setIsTranscoding(true);
+      try {
+        uploadFile = await transcodeToWav(file);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "We couldn't read that file. Try a different format (MP3 or WAV).",
+        );
+        setIsTranscoding(false);
+        return;
+      }
+      setIsTranscoding(false);
+      if (uploadFile.size > MAX_FILE_BYTES) {
+        setError(
+          `Converted file is over ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB. Try a shorter clip or upload as MP3.`,
+        );
+        return;
+      }
+    }
+
+    setIsAnalyzing(true);
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', uploadFile);
 
       const enqueueRes = await fetch('/api/tracks/analyze', {
         method: 'POST',
@@ -165,7 +229,7 @@ export function UploadForm() {
 
       const job = await pollAnalyzeJob(enqueueBody.statusUrl);
       if (job.status === 'failed') {
-        throw new Error(job.error || "We couldn't analyze that file.");
+        throw new Error(friendlyWorkerError(job.error));
       }
       const trackId =
         job.status === 'done' && job.result && typeof job.result === 'object'
@@ -183,11 +247,12 @@ export function UploadForm() {
       );
       setIsAnalyzing(false);
     }
-  }, [file, isAnalyzing, router]);
+  }, [file, isAnalyzing, isTranscoding, router]);
 
   const reset = useCallback(() => {
     setFile(null);
     setIsAnalyzing(false);
+    setIsTranscoding(false);
     setError(null);
     setPaywall(null);
     if (inputRef.current) inputRef.current.value = '';
@@ -282,7 +347,7 @@ export function UploadForm() {
               Drop your track here
             </p>
             <p className="text-[13px] text-[#6e6e73] mb-5">
-              MP3 or WAV, up to 50 MB
+              MP3, WAV, M4A, AAC, OGG, or FLAC. Up to {Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB
             </p>
             <button
               type="button"
@@ -307,7 +372,20 @@ export function UploadForm() {
             <p className="text-[12px] text-[#6e6e73] mb-5">
               {(file.size / (1024 * 1024)).toFixed(1)} MB
             </p>
-            {isAnalyzing ? (
+            {isTranscoding ? (
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex items-center gap-2 text-[14px] text-[#1d1d1f]">
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-3 w-3 rounded-full border-2 border-[#1d1d1f] border-t-transparent animate-spin"
+                  />
+                  Preparing your file...
+                </div>
+                <p className="text-[12px] text-[#6e6e73] max-w-[360px]">
+                  Decoding {file.name.split('.').pop()?.toUpperCase()} to WAV in your browser before upload.
+                </p>
+              </div>
+            ) : isAnalyzing ? (
               <div className="flex flex-col items-center gap-3">
                 <div className="flex items-center gap-2 text-[14px] text-[#1d1d1f]">
                   <span

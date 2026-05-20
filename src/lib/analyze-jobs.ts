@@ -65,12 +65,13 @@ function buildSpec(title: string, worker: WorkerAnalyzeResponse): SongSpec {
 async function callWorker(
   args: RunArgs,
 ): Promise<WorkerAnalyzeResponse> {
-  const path = args.workerPath;
+  const base = args.workerUrl.replace(/\/+$/, '');
+  const url = `${base}${args.workerPath}`;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), WORKER_TIMEOUT_MS);
   let resp: Response;
   try {
-    resp = await fetch(`${args.workerUrl}${path}`, {
+    resp = await fetch(url, {
       method: 'POST',
       headers: {
         'content-type': args.mime,
@@ -79,18 +80,33 @@ async function callWorker(
       body: new Uint8Array(args.audioBytes),
       signal: controller.signal,
     });
-  } finally {
+  } catch (err) {
     clearTimeout(timeoutId);
+    const cause = err instanceof Error ? err.message : String(err);
+    console.error(`[analyze-jobs] Worker fetch failed (${url}):`, cause);
+    if ((err as { name?: string })?.name === 'AbortError') {
+      throw new Error(`Worker request timed out after ${WORKER_TIMEOUT_MS}ms`);
+    }
+    throw new Error(`Worker fetch failed: ${cause}`);
   }
+  clearTimeout(timeoutId);
 
   if (!resp.ok) {
+    const raw = await resp.text().catch(() => '');
     let detail = `Worker returned ${resp.status}`;
-    try {
-      const body = (await resp.json()) as { detail?: string };
-      if (typeof body?.detail === 'string') detail = body.detail;
-    } catch {
-      // ignore body parse errors
+    if (raw) {
+      try {
+        const body = JSON.parse(raw) as { detail?: string; error?: string };
+        if (typeof body?.detail === 'string') detail = body.detail;
+        else if (typeof body?.error === 'string') detail = body.error;
+      } catch {
+        // Non-JSON body (Cloud Run / ingress HTML error page) — keep the
+        // status-only summary but log the raw payload for diagnostics.
+      }
     }
+    console.error(
+      `[analyze-jobs] Worker ${resp.status} from ${url}; body=${raw.slice(0, 500)}`,
+    );
     throw new Error(detail);
   }
 
