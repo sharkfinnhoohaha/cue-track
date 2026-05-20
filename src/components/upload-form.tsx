@@ -35,6 +35,12 @@ const MAX_FILE_BYTES = 150 * 1024 * 1024;
 const POLL_INTERVAL_MS = 1500;
 const POLL_MAX_ATTEMPTS = 90;
 
+function inferMimeFromName(name: string): string | null {
+  if (/\.mp3$/i.test(name)) return 'audio/mpeg';
+  if (/\.wav$/i.test(name)) return 'audio/wav';
+  return null;
+}
+
 interface PaywallState {
   used: number;
   limit: number;
@@ -168,12 +174,13 @@ export function UploadForm() {
 
     setIsAnalyzing(true);
     try {
+      const inferredMime = uploadFile.type || inferMimeFromName(uploadFile.name);
       let blob: { url: string };
       try {
         blob = await upload(uploadFile.name, uploadFile, {
           access: 'public',
           handleUploadUrl: '/api/tracks/analyze/upload',
-          contentType: uploadFile.type || 'application/octet-stream',
+          contentType: inferredMime || 'application/octet-stream',
         });
       } catch (err) {
         console.error('[upload-form] Blob upload failed:', err);
@@ -193,7 +200,7 @@ export function UploadForm() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           blobUrl: blob.url,
-          contentType: uploadFile.type || 'audio/wav',
+          contentType: inferredMime || '',
           filename: uploadFile.name,
           size: uploadFile.size,
         }),

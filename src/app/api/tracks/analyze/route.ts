@@ -53,10 +53,17 @@ function stripExtension(name: string): string {
 
 function normalizeMime(mime: string, filename: string): string | null {
   const base = mime.toLowerCase().split(';')[0].trim();
+  const extMime = /\.mp3$/i.test(filename)
+    ? 'audio/mpeg'
+    : /\.wav$/i.test(filename)
+      ? 'audio/wav'
+      : null;
+  if (extMime) {
+    if (!base || base === 'application/octet-stream') return extMime;
+    if (ACCEPTED_MIMES.has(base) && base !== extMime) return extMime;
+  }
   if (ACCEPTED_MIMES.has(base)) return base;
-  if (/\.mp3$/i.test(filename)) return 'audio/mpeg';
-  if (/\.wav$/i.test(filename)) return 'audio/wav';
-  return null;
+  return extMime;
 }
 
 function isAllowedBlobUrl(raw: string): boolean {

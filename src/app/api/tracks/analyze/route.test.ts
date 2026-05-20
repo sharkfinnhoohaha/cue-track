@@ -163,6 +163,24 @@ describe('POST /api/tracks/analyze (async, blob-uploaded)', () => {
     expect(mockWaitUntil).not.toHaveBeenCalled();
   });
 
+  it('infers mime from the filename when contentType is missing', async () => {
+    const res = await POST(
+      makeRequest({ contentType: '', filename: 'song.mp3' }),
+    );
+    expect(res.status).toBe(202);
+    const runArgs = mockRunAnalyzeJob.mock.calls[0]?.[0];
+    expect(runArgs?.mime).toBe('audio/mpeg');
+  });
+
+  it('prefers the filename when contentType conflicts with the extension', async () => {
+    const res = await POST(
+      makeRequest({ contentType: 'audio/wav', filename: 'song.mp3' }),
+    );
+    expect(res.status).toBe(202);
+    const runArgs = mockRunAnalyzeJob.mock.calls[0]?.[0];
+    expect(runArgs?.mime).toBe('audio/mpeg');
+  });
+
   it('returns 429 when the rate limiter rejects', async () => {
     mockCheckAndRecord.mockResolvedValue({
       allowed: false,
