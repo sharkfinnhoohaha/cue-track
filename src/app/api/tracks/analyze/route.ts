@@ -31,7 +31,10 @@ export const runtime = 'nodejs';
 // Method selection: hard-coded to 'template' here in PR-B. PR-D introduces
 // the A/B router that picks 'foote' or 'ml' per caller-stable hash.
 
-const MAX_FILE_BYTES = 50 * 1024 * 1024;
+// 150 MB matches the client cap (see src/components/upload-form.tsx). Browser-
+// transcoded WAVs from M4A/AAC uploads can grow 5-10x the original, so the
+// limit needs to cover both raw WAV uploads and re-encoded mobile recordings.
+const MAX_FILE_BYTES = 150 * 1024 * 1024;
 const ACCEPTED_MIMES = new Set([
   'audio/mpeg',
   'audio/mp3',

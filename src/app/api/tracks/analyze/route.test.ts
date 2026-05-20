@@ -132,8 +132,8 @@ describe('POST /api/tracks/analyze (async)', () => {
     expect(mockWaitUntil).not.toHaveBeenCalled();
   });
 
-  it('returns 413 when the file exceeds 50 MB', async () => {
-    const big = makeAudioFile('big.wav', 'audio/wav', 51 * 1024 * 1024);
+  it('returns 413 when the file exceeds 150 MB', async () => {
+    const big = makeAudioFile('big.wav', 'audio/wav', 151 * 1024 * 1024);
     const res = await POST(makeRequest(big));
     expect(res.status).toBe(413);
     expect(mockWaitUntil).not.toHaveBeenCalled();
