@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { upload } from '@vercel/blob/client';
 import { cn } from '@/lib/cn';
 import { needsClientTranscode, transcodeToWav } from '@/lib/audio/client-decode';
+import { inferMimeFromName } from '@/lib/audio/mime';
 
 /**
  * Upload form — primary entry point for the Cue Track value prop.
@@ -168,12 +169,13 @@ export function UploadForm() {
 
     setIsAnalyzing(true);
     try {
+      const inferredMime = uploadFile.type || inferMimeFromName(uploadFile.name);
       let blob: { url: string };
       try {
         blob = await upload(uploadFile.name, uploadFile, {
           access: 'public',
           handleUploadUrl: '/api/tracks/analyze/upload',
-          contentType: uploadFile.type || 'application/octet-stream',
+          contentType: inferredMime || 'application/octet-stream',
         });
       } catch (err) {
         console.error('[upload-form] Blob upload failed:', err);
@@ -193,7 +195,7 @@ export function UploadForm() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           blobUrl: blob.url,
-          contentType: uploadFile.type || 'audio/wav',
+          contentType: inferredMime || 'application/octet-stream',
           filename: uploadFile.name,
           size: uploadFile.size,
         }),

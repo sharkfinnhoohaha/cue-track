@@ -8,6 +8,7 @@ import {
 } from '@/lib/upload-quota';
 import { runAnalyzeJob } from '@/lib/analyze-jobs';
 import { pickMethod, workerForMethod } from '@/lib/analyze-router';
+import { canonicalizeAudioMime, inferMimeFromName } from '@/lib/audio/mime';
 
 export const maxDuration = 60;
 export const runtime = 'nodejs';
@@ -38,25 +39,21 @@ interface AnalyzeRequestBody {
 }
 
 const MAX_FILE_BYTES = 150 * 1024 * 1024;
-const ACCEPTED_MIMES = new Set([
-  'audio/mpeg',
-  'audio/mp3',
-  'audio/wav',
-  'audio/x-wav',
-  'audio/wave',
-  'audio/vnd.wave',
-]);
-
 function stripExtension(name: string): string {
   return name.replace(/\.[^./\\]+$/, '').trim() || 'Untitled track';
 }
 
 function normalizeMime(mime: string, filename: string): string | null {
   const base = mime.toLowerCase().split(';')[0].trim();
-  if (ACCEPTED_MIMES.has(base)) return base;
-  if (/\.mp3$/i.test(filename)) return 'audio/mpeg';
-  if (/\.wav$/i.test(filename)) return 'audio/wav';
-  return null;
+  const canonicalBase = canonicalizeAudioMime(base);
+  const extMime = inferMimeFromName(filename);
+  const isBlank = base.length === 0;
+  if (extMime) {
+    if (isBlank || base === 'application/octet-stream') return extMime;
+    if (!canonicalBase || canonicalBase !== extMime) return extMime;
+    return canonicalBase;
+  }
+  return canonicalBase;
 }
 
 function isAllowedBlobUrl(raw: string): boolean {
