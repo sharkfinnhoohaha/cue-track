@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import type { SongSpec } from '@/types';
 import { auth } from '@/auth';
 import { checkAndRecordRateLimit, getClientIpHash } from '@/lib/rate-limit';
 import {
@@ -289,28 +288,4 @@ export async function POST(request: NextRequest) {
     },
     { status: 202 },
   );
-}
-
-// Re-exported for tests that import buildSuggestedSpec.
-export function buildSuggestedSpec(
-  title: string,
-  worker: {
-    bpm: number;
-    duration: number;
-    suggestedSections: Array<{ id: string; name: string; bars: number }>;
-  },
-): SongSpec {
-  return {
-    title,
-    bpm: worker.bpm,
-    timeSignature: { beats: 4, subdivision: 4 },
-    sections: worker.suggestedSections,
-    voiceId: 'en-US-Standard-D',
-    clickSound: 'classic',
-    format: 'wav',
-    enableCountIn: true,
-    enableSectionAnnounce: true,
-    enableBarCountdown: true,
-    countInBars: 1,
-  };
 }
