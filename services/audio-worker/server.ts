@@ -261,6 +261,76 @@ async function handleRenderToGcs(req: IncomingMessage, res: ServerResponse): Pro
   }
 }
 
+async function resolveAudioPayload(
+  req: IncomingMessage,
+  res: ServerResponse,
+  contentType: string,
+): Promise<{ body: Buffer; activeMime: string; kind: string } | null> {
+  const isJson = contentType.toLowerCase().includes('application/json');
+
+  if (isJson) {
+    let jsonBody: { blobUrl?: string; mime?: string };
+    try {
+      jsonBody = await readJsonBody<{ blobUrl?: string; mime?: string }>(req);
+    } catch (err) {
+      jsonResponse(res, 400, { error: `Invalid JSON body: ${(err as Error).message}` });
+      return null;
+    }
+
+    const { blobUrl, mime } = jsonBody;
+    if (!blobUrl || !mime) {
+      jsonResponse(res, 400, { error: 'Missing blobUrl or mime in JSON body' });
+      return null;
+    }
+
+    const kind = isSupportedMime(mime);
+    if (!kind) {
+      jsonResponse(res, 415, {
+        error: 'unsupported_media_type',
+        detail: `Expected audio/mpeg or audio/wav, got: ${mime || '(none)'}`,
+      });
+      return null;
+    }
+
+    try {
+      console.log(`[audio-worker] Downloading blob from URL: ${blobUrl}`);
+      const fetchRes = await fetch(blobUrl);
+      if (!fetchRes.ok) {
+        jsonResponse(res, 502, { error: `Failed to download blob: ${fetchRes.statusText} (${fetchRes.status})` });
+        return null;
+      }
+      const arrayBuffer = await fetchRes.arrayBuffer();
+      const body = Buffer.from(arrayBuffer);
+      return { body, activeMime: mime, kind };
+    } catch (err) {
+      jsonResponse(res, 502, { error: `Failed to fetch blob URL: ${(err as Error).message}` });
+      return null;
+    }
+  } else {
+    const kind = isSupportedMime(contentType);
+    if (!kind) {
+      jsonResponse(res, 415, {
+        error: 'unsupported_media_type',
+        detail: `Expected audio/mpeg or audio/wav, got: ${contentType || '(none)'}`,
+      });
+      return null;
+    }
+
+    let body: Buffer;
+    try {
+      body = await readRawBody(req);
+    } catch (err) {
+      jsonResponse(res, 413, {
+        error: 'payload_too_large',
+        detail: (err as Error).message,
+      });
+      return null;
+    }
+
+    return { body, activeMime: contentType, kind };
+  }
+}
+
 async function handleAnalyze(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!authorized(req)) {
     return jsonResponse(res, 401, { error: 'unauthorized' });
@@ -273,23 +343,11 @@ async function handleAnalyze(req: IncomingMessage, res: ServerResponse): Promise
       : Array.isArray(contentTypeHeader)
       ? contentTypeHeader[0]
       : '';
-  const kind = isSupportedMime(mime);
-  if (!kind) {
-    return jsonResponse(res, 415, {
-      error: 'unsupported_media_type',
-      detail: `Expected audio/mpeg or audio/wav, got: ${mime || '(none)'}`,
-    });
-  }
 
-  let body: Buffer;
-  try {
-    body = await readRawBody(req);
-  } catch (err) {
-    return jsonResponse(res, 413, {
-      error: 'payload_too_large',
-      detail: (err as Error).message,
-    });
-  }
+  const payload = await resolveAudioPayload(req, res, mime);
+  if (!payload) return;
+
+  const { body, activeMime, kind } = payload;
 
   if (body.length === 0) {
     return jsonResponse(res, 400, { error: 'empty_body' });
@@ -298,7 +356,7 @@ async function handleAnalyze(req: IncomingMessage, res: ServerResponse): Promise
   const startTime = Date.now();
   let result: AnalyzeResult;
   try {
-    result = await analyzeAudio(body, mime);
+    result = await analyzeAudio(body, activeMime);
   } catch (err) {
     console.error('[audio-worker] Analyze failed:', err);
     return jsonResponse(res, 422, {
@@ -329,23 +387,11 @@ async function handleAnalyzeFoote(req: IncomingMessage, res: ServerResponse): Pr
       : Array.isArray(contentTypeHeader)
       ? contentTypeHeader[0]
       : '';
-  const kind = isSupportedMime(mime);
-  if (!kind) {
-    return jsonResponse(res, 415, {
-      error: 'unsupported_media_type',
-      detail: `Expected audio/mpeg or audio/wav, got: ${mime || '(none)'}`,
-    });
-  }
 
-  let body: Buffer;
-  try {
-    body = await readRawBody(req);
-  } catch (err) {
-    return jsonResponse(res, 413, {
-      error: 'payload_too_large',
-      detail: (err as Error).message,
-    });
-  }
+  const payload = await resolveAudioPayload(req, res, mime);
+  if (!payload) return;
+
+  const { body, activeMime, kind } = payload;
 
   if (body.length === 0) {
     return jsonResponse(res, 400, { error: 'empty_body' });
@@ -354,7 +400,7 @@ async function handleAnalyzeFoote(req: IncomingMessage, res: ServerResponse): Pr
   const startTime = Date.now();
   let result: FooteResult;
   try {
-    result = await footeAnalyze(body, mime);
+    result = await footeAnalyze(body, activeMime);
   } catch (err) {
     console.error('[audio-worker] Foote analyze failed:', err);
     return jsonResponse(res, 422, {

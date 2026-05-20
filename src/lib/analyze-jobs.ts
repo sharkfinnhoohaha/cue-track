@@ -87,21 +87,27 @@ async function downloadBlob(url: string): Promise<Buffer> {
 
 async function callWorker(
   args: RunArgs,
-  audioBytes: Buffer,
+  audioBytes?: Buffer,
 ): Promise<WorkerAnalyzeResponse> {
   const base = args.workerUrl.replace(/\/+$/, '');
   const url = `${base}${args.workerPath}`;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), WORKER_TIMEOUT_MS);
   let resp: Response;
+
+  const isJson = !audioBytes;
+  const body = isJson
+    ? JSON.stringify({ blobUrl: args.blobUrl, mime: args.mime })
+    : new Uint8Array(audioBytes);
+
   try {
     resp = await fetch(url, {
       method: 'POST',
       headers: {
-        'content-type': args.mime,
+        'content-type': isJson ? 'application/json' : args.mime,
         'x-worker-secret': args.workerSecret,
       },
-      body: new Uint8Array(audioBytes),
+      body,
       signal: controller.signal,
     });
   } catch (err) {
@@ -134,15 +140,15 @@ async function callWorker(
     throw new Error(detail);
   }
 
-  const body = (await resp.json()) as WorkerAnalyzeResponse;
+  const bodyRes = (await resp.json()) as WorkerAnalyzeResponse;
   if (
-    typeof body.bpm !== 'number' ||
-    typeof body.duration !== 'number' ||
-    !Array.isArray(body.suggestedSections)
+    typeof bodyRes.bpm !== 'number' ||
+    typeof bodyRes.duration !== 'number' ||
+    !Array.isArray(bodyRes.suggestedSections)
   ) {
     throw new Error('Worker returned malformed payload (missing bpm/duration/sections)');
   }
-  return body;
+  return bodyRes;
 }
 
 async function deleteBlobSafely(url: string, jobId: string): Promise<void> {
@@ -170,12 +176,8 @@ export async function runAnalyzeJob(args: RunArgs): Promise<void> {
 
   // --- Download blob + call worker + persist track + mark done --------
   try {
-    const audioBytes = await downloadBlob(args.blobUrl);
-    if (audioBytes.length === 0) {
-      throw new Error('Downloaded blob is empty');
-    }
-
-    const worker = await callWorker(args, audioBytes);
+    // Call worker directly with Vercel Blob URL to bypass 32 MB Cloud Run body limit
+    const worker = await callWorker(args);
     const spec = buildSpec(args.title, worker);
     const durationSec = Math.max(1, Math.round(worker.duration));
 

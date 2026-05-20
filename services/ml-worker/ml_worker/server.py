@@ -33,7 +33,7 @@ logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Cue Track ML Worker", version="0.1.0")
 
 WORKER_SHARED_SECRET = os.environ.get("WORKER_SHARED_SECRET")
-MAX_BYTES = 52 * 1024 * 1024  # 52 MB
+MAX_BYTES = 160 * 1024 * 1024  # 160 MB
 ACCEPTED_MIMES = {
     "audio/mpeg",
     "audio/mp3",
@@ -72,18 +72,56 @@ async def analyze_endpoint(
     if x_worker_secret != WORKER_SHARED_SECRET:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    mime = _normalize_mime(request.headers.get("content-type"))
-    if not mime:
-        raise HTTPException(
-            status_code=415,
-            detail=f"Expected audio/mpeg or audio/wav, got: {request.headers.get('content-type') or '(none)'}",
-        )
+    content_type = request.headers.get("content-type") or ""
+    is_json = "application/json" in content_type.lower()
 
-    body = await request.body()
-    if not body:
-        raise HTTPException(status_code=400, detail="empty_body")
-    if len(body) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail=f"payload exceeds {MAX_BYTES} bytes")
+    if is_json:
+        try:
+            json_body = await request.json()
+        except Exception as err:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON body: {err}")
+
+        blob_url = json_body.get("blobUrl")
+        mime_type = json_body.get("mime")
+        if not blob_url or not mime_type:
+            raise HTTPException(status_code=400, detail="Missing blobUrl or mime in JSON body")
+
+        mime = _normalize_mime(mime_type)
+        if not mime:
+            raise HTTPException(
+                status_code=415,
+                detail=f"Unsupported mime in JSON body: {mime_type}",
+            )
+
+        import urllib.request
+        from urllib.error import HTTPError, URLError
+
+        try:
+            logger.info("Downloading blob from URL: %s", blob_url)
+            with urllib.request.urlopen(blob_url, timeout=60) as response:
+                body = response.read()
+        except HTTPError as err:
+            logger.error("Failed to download blob: HTTP %d %s", err.code, err.reason)
+            raise HTTPException(status_code=502, detail=f"Failed to download blob: HTTP {err.code}")
+        except URLError as err:
+            logger.error("Failed to connect to blob URL: %s", err.reason)
+            raise HTTPException(status_code=502, detail=f"Failed to fetch blob: {err.reason}")
+        except Exception as err:
+            logger.error("Unknown error downloading blob: %s", err)
+            raise HTTPException(status_code=502, detail=f"Failed to fetch blob: {err}")
+    else:
+        mime = _normalize_mime(content_type)
+        if not mime:
+            raise HTTPException(
+                status_code=415,
+                detail=f"Expected audio/mpeg or audio/wav, got: {content_type or '(none)'}",
+            )
+
+        body = await request.body()
+        if not body:
+            raise HTTPException(status_code=400, detail="empty_body")
+        if len(body) > MAX_BYTES:
+            raise HTTPException(status_code=413, detail=f"payload exceeds {MAX_BYTES} bytes")
 
     started = time.time()
     try:

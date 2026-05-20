@@ -218,3 +218,62 @@ def test_analyze_returns_422_on_analyzer_exception(client: TestClient) -> None:
     assert res.status_code == 422
     body = res.json()
     assert "decode boom" in body["detail"]
+
+
+def test_analyze_json_blob_url(client: TestClient) -> None:
+    fake_result = {
+        "bpm": 120,
+        "duration": 60.0,
+        "sampleRate": 44100,
+        "suggestedSections": []
+    }
+
+    class FakeResponse:
+        def __init__(self, data: bytes):
+            self.data = data
+        def read(self) -> bytes:
+            return self.data
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    with patch("urllib.request.urlopen", return_value=FakeResponse(b"fakebytes")) as mock_urlopen, \
+         patch("ml_worker.server.analyze_bytes", return_value=fake_result) as mock_analyze:
+        res = client.post(
+            "/analyze",
+            json={
+                "blobUrl": "https://foo.blob.vercel-storage.com/track.wav",
+                "mime": "audio/wav"
+            },
+            headers={"X-Worker-Secret": "test-secret"}
+        )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["bpm"] == 120
+    mock_urlopen.assert_called_once_with("https://foo.blob.vercel-storage.com/track.wav", timeout=60)
+    mock_analyze.assert_called_once_with(b"fakebytes", "audio/wav")
+
+
+def test_analyze_json_missing_fields(client: TestClient) -> None:
+    res = client.post(
+        "/analyze",
+        json={"blobUrl": "https://foo.blob.vercel-storage.com/track.wav"},
+        headers={"X-Worker-Secret": "test-secret"}
+    )
+    assert res.status_code == 400
+    assert "Missing blobUrl or mime" in res.json()["detail"]
+
+
+def test_analyze_json_unsupported_mime(client: TestClient) -> None:
+    res = client.post(
+        "/analyze",
+        json={
+            "blobUrl": "https://foo.blob.vercel-storage.com/track.wav",
+            "mime": "audio/flac"
+        },
+        headers={"X-Worker-Secret": "test-secret"}
+    )
+    assert res.status_code == 415
+
