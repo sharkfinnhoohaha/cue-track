@@ -1,2 +1,11 @@
 .vercel
 .env*.local
+node_modules/
+next-env.d.ts
+tsconfig.tsbuildinfo
+.next/
+out/
+build/
+coverage/
+*.log
+.DS_Store
