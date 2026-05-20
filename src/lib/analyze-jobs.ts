@@ -3,20 +3,22 @@
  *
  * Invoked via @vercel/functions waitUntil from the POST route. Walks a
  * single analyze_jobs row through queued -> running -> done|failed,
- * forwarding the audio to the audio worker and persisting the resulting
- * draft tracks row when the worker returns.
+ * downloading the audio from Vercel Blob, forwarding to the audio worker,
+ * and persisting the resulting draft tracks row when the worker returns.
  *
  * Idempotency: if the same jobId is processed twice (e.g. retry on
  * function restart) the row state machine prevents double-processing —
  * the second run sees status != 'queued' and exits.
  *
- * The audio bytes are passed in via closure rather than reread from
- * Postgres or GCS. Keeps PR-B contained to one moving part; if we later
- * want to retry failed jobs from a worker drain, we will need to persist
- * the audio externally.
+ * Blob lifecycle: the client uploads the source audio directly to Vercel
+ * Blob before calling the analyze enqueue route. The runner downloads the
+ * blob bytes, forwards them to the audio worker, and deletes the blob on
+ * completion (success or failure) so the bucket does not accumulate
+ * stale uploads.
  */
 
 import { eq, and } from 'drizzle-orm';
+import { del } from '@vercel/blob';
 import { db, analyzeJobs, tracks } from '@/lib/db';
 import type { AnalyzeJobResult } from '@/lib/db/schema';
 import { recordUploadAnalysis } from '@/lib/upload-quota';
@@ -26,7 +28,7 @@ export type AnalyzeMethod = 'template' | 'foote' | 'ml';
 
 interface RunArgs {
   jobId: string;
-  audioBytes: Buffer;
+  blobUrl: string;
   mime: string;
   title: string;
   method: AnalyzeMethod;
@@ -45,6 +47,7 @@ interface WorkerAnalyzeResponse {
 }
 
 const WORKER_TIMEOUT_MS = 90_000;
+const BLOB_FETCH_TIMEOUT_MS = 60_000;
 
 function buildSpec(title: string, worker: WorkerAnalyzeResponse): SongSpec {
   return {
@@ -62,8 +65,29 @@ function buildSpec(title: string, worker: WorkerAnalyzeResponse): SongSpec {
   };
 }
 
+async function downloadBlob(url: string): Promise<Buffer> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), BLOB_FETCH_TIMEOUT_MS);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    if (!resp.ok) {
+      throw new Error(`Blob download failed (${resp.status})`);
+    }
+    const ab = await resp.arrayBuffer();
+    return Buffer.from(ab);
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'AbortError') {
+      throw new Error(`Blob download timed out after ${BLOB_FETCH_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function callWorker(
   args: RunArgs,
+  audioBytes: Buffer,
 ): Promise<WorkerAnalyzeResponse> {
   const base = args.workerUrl.replace(/\/+$/, '');
   const url = `${base}${args.workerPath}`;
@@ -77,7 +101,7 @@ async function callWorker(
         'content-type': args.mime,
         'x-worker-secret': args.workerSecret,
       },
-      body: new Uint8Array(args.audioBytes),
+      body: new Uint8Array(audioBytes),
       signal: controller.signal,
     });
   } catch (err) {
@@ -121,6 +145,16 @@ async function callWorker(
   return body;
 }
 
+async function deleteBlobSafely(url: string, jobId: string): Promise<void> {
+  try {
+    await del(url);
+  } catch (err) {
+    // Logged but non-fatal: blobs without a cleanup get caught by the
+    // Vercel Blob retention policy / a future cleanup cron.
+    console.warn(`[analyze-jobs] Blob cleanup failed for ${jobId} (${url}):`, err);
+  }
+}
+
 export async function runAnalyzeJob(args: RunArgs): Promise<void> {
   // --- Claim the job (transition queued -> running) -------------------
   const claimed = await db
@@ -134,9 +168,14 @@ export async function runAnalyzeJob(args: RunArgs): Promise<void> {
     return;
   }
 
-  // --- Call worker + persist track + mark done ------------------------
+  // --- Download blob + call worker + persist track + mark done --------
   try {
-    const worker = await callWorker(args);
+    const audioBytes = await downloadBlob(args.blobUrl);
+    if (audioBytes.length === 0) {
+      throw new Error('Downloaded blob is empty');
+    }
+
+    const worker = await callWorker(args, audioBytes);
     const spec = buildSpec(args.title, worker);
     const durationSec = Math.max(1, Math.round(worker.duration));
 
@@ -177,7 +216,6 @@ export async function runAnalyzeJob(args: RunArgs): Promise<void> {
       })
       .where(eq(analyzeJobs.id, args.jobId));
 
-    // Best-effort quota accounting. Don't fail the job if this errors.
     try {
       await recordUploadAnalysis(args.identifier, trackId);
     } catch (err) {
@@ -202,5 +240,7 @@ export async function runAnalyzeJob(args: RunArgs): Promise<void> {
     } catch (updateErr) {
       console.error(`[analyze-jobs] Could not mark job ${args.jobId} failed:`, updateErr);
     }
+  } finally {
+    await deleteBlobSafely(args.blobUrl, args.jobId);
   }
 }

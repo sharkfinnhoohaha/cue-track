@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { upload } from '@vercel/blob/client';
 import { cn } from '@/lib/cn';
 import { needsClientTranscode, transcodeToWav } from '@/lib/audio/client-decode';
 
@@ -13,13 +14,14 @@ import { needsClientTranscode, transcodeToWav } from '@/lib/audio/client-decode'
  *   1. User drops or picks an audio file (MP3, WAV, M4A, AAC, OGG, FLAC; <= 150 MB)
  *   2. Non-MP3/WAV files are transcoded to WAV in the browser before upload
  *      (see src/lib/audio/client-decode.ts)
- *   3. Click "Analyze track" → POST file to /api/tracks/analyze
- *   4. On success, navigate to /tracks/[id]/review so the user can adjust
- *      the detected BPM + suggested sections before finalizing.
- *
- * The route persists a draft tracks row (status='rendering') with the
- * worker's suggested SongSpec; the review screen then submits to
- * /api/tracks/generate with existingTrackId to flip the row to ready.
+ *   3. Upload audio directly to Vercel Blob via /api/tracks/analyze/upload.
+ *      Going through Vercel Blob bypasses Vercel's 4.5 MB serverless body
+ *      cap, which used to 413 every full-song upload.
+ *   4. POST { blobUrl, contentType, filename, size } to /api/tracks/analyze.
+ *      That route enqueues an analyze_jobs row, kicks off the worker call
+ *      via waitUntil, and returns { jobId, statusUrl }.
+ *   5. Poll the statusUrl until status is done|failed, then navigate to
+ *      /tracks/[id]/review with the worker-suggested SongSpec.
  */
 
 // Browser-decoded formats (M4A, AAC, OGG, FLAC, …) are transcoded client-side
@@ -166,12 +168,35 @@ export function UploadForm() {
 
     setIsAnalyzing(true);
     try {
-      const formData = new FormData();
-      formData.append('file', uploadFile);
+      let blob: { url: string };
+      try {
+        blob = await upload(uploadFile.name, uploadFile, {
+          access: 'public',
+          handleUploadUrl: '/api/tracks/analyze/upload',
+          contentType: uploadFile.type || 'application/octet-stream',
+        });
+      } catch (err) {
+        console.error('[upload-form] Blob upload failed:', err);
+        const msg = err instanceof Error ? err.message : '';
+        if (/quota|exceeded|maximum size/i.test(msg)) {
+          throw new Error(
+            `File is over ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB. Trim or re-export at a lower bitrate.`,
+          );
+        }
+        throw new Error(
+          'Could not upload your file. Check your connection and try again.',
+        );
+      }
 
       const enqueueRes = await fetch('/api/tracks/analyze', {
         method: 'POST',
-        body: formData,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          blobUrl: blob.url,
+          contentType: uploadFile.type || 'audio/wav',
+          filename: uploadFile.name,
+          size: uploadFile.size,
+        }),
       });
 
       if (!enqueueRes.ok) {

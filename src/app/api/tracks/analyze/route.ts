@@ -13,26 +13,30 @@ export const maxDuration = 60;
 export const runtime = 'nodejs';
 
 // ---------------------------------------------------------------------------
-// POST /api/tracks/analyze (Phase D async)
+// POST /api/tracks/analyze (Phase D async, blob-uploaded)
 // ---------------------------------------------------------------------------
 //
-// Accepts multipart/form-data with a "file" field (MP3 or WAV, <= 50 MB),
-// validates the upload + quota, then enqueues an analyze_jobs row and
-// returns 202 + { jobId, statusUrl }. The actual worker call runs in
-// the background via @vercel/functions waitUntil; the client polls
-// GET /api/tracks/analyze/jobs/[id] for { status, result, error }.
+// Accepts JSON with the URL of a previously-uploaded Vercel Blob and the
+// file's metadata. The client first uploads the audio file directly to
+// Vercel Blob via /api/tracks/analyze/upload (handleUpload token broker)
+// and posts the resulting URL here. This bypasses Vercel's 4.5 MB
+// serverless-function request-body limit, which used to 413 any real-world
+// song upload.
 //
-// When the job completes the worker, the background pipeline inserts a
-// draft tracks row (status='rendering', spec derived from worker output)
-// and writes its id into analyze_jobs.result.trackId so the client can
-// navigate to /tracks/[id]/review.
-//
-// Method selection: hard-coded to 'template' here in PR-B. PR-D introduces
-// the A/B router that picks 'foote' or 'ml' per caller-stable hash.
+// On accept, validates the upload + quota, enqueues an analyze_jobs row,
+// and returns 202 + { jobId, statusUrl }. The actual worker call runs in
+// the background via @vercel/functions waitUntil. The runner downloads
+// the blob, forwards to the audio worker, persists a draft tracks row,
+// and deletes the blob. The client polls GET /api/tracks/analyze/jobs/[id]
+// for { status, result, error }.
 
-// 150 MB matches the client cap (see src/components/upload-form.tsx). Browser-
-// transcoded WAVs from M4A/AAC uploads can grow 5-10x the original, so the
-// limit needs to cover both raw WAV uploads and re-encoded mobile recordings.
+interface AnalyzeRequestBody {
+  blobUrl?: string;
+  contentType?: string;
+  filename?: string;
+  size?: number;
+}
+
 const MAX_FILE_BYTES = 150 * 1024 * 1024;
 const ACCEPTED_MIMES = new Set([
   'audio/mpeg',
@@ -55,53 +59,80 @@ function normalizeMime(mime: string, filename: string): string | null {
   return null;
 }
 
+function isAllowedBlobUrl(raw: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  // Vercel Blob URLs live on *.public.blob.vercel-storage.com (and the
+  // legacy *.blob.vercel-storage.com host). Reject everything else so the
+  // server-side fetch can't be tricked into pulling arbitrary URLs.
+  return /\.blob\.vercel-storage\.com$/.test(parsed.hostname);
+}
 
 export async function POST(request: NextRequest) {
-  // --- Parse multipart form ---------------------------------------------
-  let formData: FormData;
+  // --- Parse JSON body --------------------------------------------------
+  let body: AnalyzeRequestBody;
   try {
-    formData = await request.formData();
+    body = (await request.json()) as AnalyzeRequestBody;
   } catch (err) {
     return NextResponse.json(
       {
-        error: 'Invalid multipart body',
-        details: err instanceof Error ? err.message : 'Could not parse form',
+        error: 'Invalid JSON body',
+        details: err instanceof Error ? err.message : 'Could not parse body',
       },
       { status: 400 },
     );
   }
 
-  const file = formData.get('file');
-  if (!(file instanceof File)) {
+  const blobUrl = body.blobUrl?.trim();
+  const filename = body.filename?.trim() ?? '';
+  const contentType = body.contentType?.trim() ?? '';
+  const size = typeof body.size === 'number' ? body.size : NaN;
+
+  if (!blobUrl || !isAllowedBlobUrl(blobUrl)) {
     return NextResponse.json(
-      { error: 'Missing file', details: 'Expected a "file" field of type File' },
+      {
+        error: 'Missing or invalid blobUrl',
+        details: 'Upload the audio via /api/tracks/analyze/upload first.',
+      },
       { status: 400 },
     );
   }
 
-  if (file.size === 0) {
+  if (!filename) {
     return NextResponse.json(
-      { error: 'Empty file', details: 'Uploaded file is 0 bytes' },
+      { error: 'Missing filename' },
       { status: 400 },
     );
   }
 
-  if (file.size > MAX_FILE_BYTES) {
+  if (!Number.isFinite(size) || size <= 0) {
+    return NextResponse.json(
+      { error: 'Missing or invalid size' },
+      { status: 400 },
+    );
+  }
+
+  if (size > MAX_FILE_BYTES) {
     return NextResponse.json(
       {
         error: 'File too large',
-        details: `Max ${MAX_FILE_BYTES} bytes (${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB). Got ${file.size}.`,
+        details: `Max ${MAX_FILE_BYTES} bytes (${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB). Got ${size}.`,
       },
       { status: 413 },
     );
   }
 
-  const mime = normalizeMime(file.type, file.name);
+  const mime = normalizeMime(contentType, filename);
   if (!mime) {
     return NextResponse.json(
       {
         error: 'Unsupported file type',
-        details: `Expected MP3 or WAV. Got mime="${file.type}", filename="${file.name}".`,
+        details: `Expected MP3 or WAV. Got mime="${contentType}", filename="${filename}".`,
       },
       { status: 415 },
     );
@@ -194,14 +225,10 @@ export async function POST(request: NextRequest) {
   const requestUrl = new URL(request.url);
   let method = pickMethod({ identifier: rateIdentifier, url: requestUrl });
   let workerCfg = workerForMethod(method);
-  // If the router picked ML but its env is missing, fall through to Foote.
-  // Lets us merge router code before the ML worker exists in prod.
   if (method === 'ml' && (!workerCfg.url || !workerCfg.secret)) {
     method = 'foote';
     workerCfg = workerForMethod(method);
   }
-  // Final guard: the Foote/template path must have the Node worker
-  // configured. Without it, analyze cannot run at all.
   if (!workerCfg.url || !workerCfg.secret) {
     return NextResponse.json(
       {
@@ -213,21 +240,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // --- Buffer the upload + enqueue the job ------------------------------
-  let audioBytes: ArrayBuffer;
-  try {
-    audioBytes = await file.arrayBuffer();
-  } catch (err) {
-    return NextResponse.json(
-      {
-        error: 'Could not read upload',
-        details: err instanceof Error ? err.message : 'Unknown read error',
-      },
-      { status: 400 },
-    );
-  }
-
-  const title = stripExtension(file.name);
+  const title = stripExtension(filename);
 
   const { db, analyzeJobs } = await import('@/lib/db');
   let jobId: string;
@@ -238,7 +251,7 @@ export async function POST(request: NextRequest) {
         identifier: rateIdentifier,
         method,
         status: 'queued',
-        audioSizeBytes: file.size,
+        audioSizeBytes: size,
         mime,
         title,
       })
@@ -268,7 +281,7 @@ export async function POST(request: NextRequest) {
   waitUntil(
     runAnalyzeJob({
       jobId,
-      audioBytes: Buffer.from(audioBytes),
+      blobUrl,
       mime,
       title,
       method,
