@@ -56,8 +56,13 @@ function normalizeMime(mime: string, filename: string): string | null {
   const base = mime.toLowerCase().split(';')[0].trim();
   const extMime = inferMimeFromName(filename);
   if (extMime) {
-    if (!base || base === 'application/octet-stream') return extMime;
-    if (ACCEPTED_MIMES.has(base) && base !== extMime) return extMime;
+    if (base.length === 0 || base === 'application/octet-stream') return extMime;
+    if (
+      (base === 'audio/wav' && extMime === 'audio/mpeg') ||
+      (base === 'audio/mpeg' && extMime === 'audio/wav')
+    ) {
+      return extMime;
+    }
   }
   if (ACCEPTED_MIMES.has(base)) return base;
   return extMime;
