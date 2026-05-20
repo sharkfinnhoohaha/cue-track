@@ -8,6 +8,7 @@ import {
 } from '@/lib/upload-quota';
 import { runAnalyzeJob } from '@/lib/analyze-jobs';
 import { pickMethod, workerForMethod } from '@/lib/analyze-router';
+import { inferMimeFromName } from '@/lib/audio/mime';
 
 export const maxDuration = 60;
 export const runtime = 'nodejs';
@@ -53,11 +54,7 @@ function stripExtension(name: string): string {
 
 function normalizeMime(mime: string, filename: string): string | null {
   const base = mime.toLowerCase().split(';')[0].trim();
-  const extMime = /\.mp3$/i.test(filename)
-    ? 'audio/mpeg'
-    : /\.wav$/i.test(filename)
-      ? 'audio/wav'
-      : null;
+  const extMime = inferMimeFromName(filename);
   if (extMime) {
     if (!base || base === 'application/octet-stream') return extMime;
     if (ACCEPTED_MIMES.has(base) && base !== extMime) return extMime;

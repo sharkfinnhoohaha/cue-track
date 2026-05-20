@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { upload } from '@vercel/blob/client';
 import { cn } from '@/lib/cn';
 import { needsClientTranscode, transcodeToWav } from '@/lib/audio/client-decode';
+import { inferMimeFromName } from '@/lib/audio/mime';
 
 /**
  * Upload form — primary entry point for the Cue Track value prop.
@@ -34,12 +35,6 @@ const ACCEPTED_EXT_RE = /\.(mp3|wav|m4a|mp4|aac|ogg|oga|flac)$/i;
 const MAX_FILE_BYTES = 150 * 1024 * 1024;
 const POLL_INTERVAL_MS = 1500;
 const POLL_MAX_ATTEMPTS = 90;
-
-function inferMimeFromName(name: string): string | null {
-  if (/\.mp3$/i.test(name)) return 'audio/mpeg';
-  if (/\.wav$/i.test(name)) return 'audio/wav';
-  return null;
-}
 
 interface PaywallState {
   used: number;
@@ -200,7 +195,7 @@ export function UploadForm() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           blobUrl: blob.url,
-          contentType: inferredMime || '',
+          contentType: inferredMime || 'application/octet-stream',
           filename: uploadFile.name,
           size: uploadFile.size,
         }),
