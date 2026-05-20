@@ -47,13 +47,13 @@ function normalizeMime(mime: string, filename: string): string | null {
   const base = mime.toLowerCase().split(';')[0].trim();
   const canonicalBase = canonicalizeAudioMime(base);
   const extMime = inferMimeFromName(filename);
+  const isBlank = base.length === 0;
   if (extMime) {
-    if (base.length === 0 || base === 'application/octet-stream') return extMime;
-    if (canonicalBase && canonicalBase !== extMime) {
-      return extMime;
-    }
+    if (isBlank || base === 'application/octet-stream') return extMime;
+    if (!canonicalBase || canonicalBase !== extMime) return extMime;
+    return canonicalBase;
   }
-  return canonicalBase ?? extMime;
+  return canonicalBase;
 }
 
 function isAllowedBlobUrl(raw: string): boolean {
