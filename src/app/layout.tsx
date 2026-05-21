@@ -1,22 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { JetBrains_Mono, Inter } from 'next/font/google';
 import './globals.css';
-
-// ─── Fonts ───────────────────────────────────────────────────────────────────
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-jetbrains',
-  display: 'swap',
-});
-
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700', '800', '900'],
-  variable: '--font-inter',
-  display: 'swap',
-});
 
 // ─── Metadata ────────────────────────────────────────────────────────────────
 
@@ -97,7 +80,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${jetbrainsMono.variable} ${inter.variable}`}>
+    <html lang="en">
       <body>{children}</body>
     </html>
   );
