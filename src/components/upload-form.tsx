@@ -75,6 +75,14 @@ function friendlyWorkerError(raw: string | null): string {
   return text;
 }
 
+function resolveUploadMime(file: File): string | null {
+  const raw = file.type.toLowerCase().split(';')[0].trim();
+  if (!raw || raw === 'application/octet-stream') {
+    return inferMimeFromName(file.name);
+  }
+  return raw;
+}
+
 async function pollAnalyzeJob(statusUrl: string): Promise<PolledJob> {
   for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
@@ -169,13 +177,16 @@ export function UploadForm() {
 
     setIsAnalyzing(true);
     try {
-      const inferredMime = uploadFile.type || inferMimeFromName(uploadFile.name);
+      const inferredMime = resolveUploadMime(uploadFile);
+      if (!inferredMime) {
+        throw new Error("We can't read that file. Try a different MP3 or WAV.");
+      }
       let blob: { url: string };
       try {
         blob = await upload(uploadFile.name, uploadFile, {
           access: 'public',
           handleUploadUrl: '/api/tracks/analyze/upload',
-          contentType: inferredMime || 'application/octet-stream',
+          contentType: inferredMime,
         });
       } catch (err) {
         console.error('[upload-form] Blob upload failed:', err);
@@ -195,7 +206,7 @@ export function UploadForm() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           blobUrl: blob.url,
-          contentType: inferredMime || 'application/octet-stream',
+          contentType: inferredMime,
           filename: uploadFile.name,
           size: uploadFile.size,
         }),
