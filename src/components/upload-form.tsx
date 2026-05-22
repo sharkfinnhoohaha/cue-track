@@ -172,7 +172,9 @@ export function UploadForm() {
         });
       } catch (err) {
         console.error('[upload-form] Blob upload failed:', err);
-        const msg = err instanceof Error ? err.message : String(err ?? '');
+        let msg = '';
+        if (err instanceof Error) msg = err.message;
+        else if (typeof err === 'string') msg = err;
         throw new Error(
           friendlyUploadError(msg, Math.round(MAX_FILE_BYTES / 1024 / 1024)),
         );

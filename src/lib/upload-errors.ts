@@ -1,10 +1,14 @@
 export function friendlyUploadError(raw: string, maxFileMb: number): string {
   const text = raw.trim();
-  if (/quota|exceeded|maximum size/i.test(text)) {
+  if (
+    /maximum size|payload too large|file too large|file is over|upload size|size limit/i.test(
+      text,
+    )
+  ) {
     return `File is over ${maxFileMb} MB. Trim or re-export at a lower bitrate.`;
   }
-  if (/BLOB_READ_WRITE_TOKEN|Upload storage is not configured/i.test(text)) {
-    return 'Upload storage is not configured on the server. Set BLOB_READ_WRITE_TOKEN and redeploy.';
+  if (/Upload storage is not configured/i.test(text)) {
+    return 'Upload storage is not available right now. Please contact support and try again later.';
   }
   if (/Cannot determine client identifier|Sign in to analyze/i.test(text)) {
     return 'Could not identify your upload request. Sign in and try again.';
