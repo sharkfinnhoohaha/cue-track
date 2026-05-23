@@ -7,6 +7,7 @@ import { upload } from '@vercel/blob/client';
 import { cn } from '@/lib/cn';
 import { needsClientTranscode, transcodeToWav } from '@/lib/audio/client-decode';
 import { inferMimeFromName } from '@/lib/audio/mime';
+import { friendlyUploadError, friendlyWorkerError } from '@/lib/upload-errors';
 
 /**
  * Upload form — primary entry point for the Cue Track value prop.
@@ -47,34 +48,6 @@ interface PolledJob {
   error: string | null;
 }
 
-function friendlyWorkerError(raw: string | null): string {
-  const text = (raw ?? '').trim();
-  if (!text) return "We couldn't analyze that file. Try again or pick a different track.";
-  // Worker returned an HTTP status without a useful body — the user can't
-  // act on "Worker returned 502", so surface a recoverable message and
-  // keep the original detail in the console for debugging.
-  const statusOnly = /^Worker returned (\d+)$/i.exec(text);
-  if (statusOnly) {
-    console.error('[upload-form] Worker non-ok status:', text);
-    const status = Number(statusOnly[1]);
-    if (status === 415) return "We can't read that file. Try a different MP3 or WAV.";
-    if (status >= 500) return 'The audio analyzer is busy. Wait a moment and try again.';
-    return 'The audio analyzer rejected this file. Try a different track.';
-  }
-  // Decode errors from the worker's underlying MP3/WAV parser.
-  if (/decode/i.test(text) || /malformed/i.test(text)) {
-    console.error('[upload-form] Worker decode error:', text);
-    return "We couldn't decode that file. It may be corrupted — try a different MP3 or WAV.";
-  }
-  // Network / fetch failures bubble up as native error messages like
-  // "fetch failed" or "ECONNREFUSED ...".
-  if (/fetch failed|ECONN|ENOTFOUND|timed out|timeout/i.test(text)) {
-    console.error('[upload-form] Worker network error:', text);
-    return 'Could not reach the audio analyzer. Check your connection and try again.';
-  }
-  return text;
-}
-
 function resolveUploadMime(file: File): string | null {
   const raw = file.type.toLowerCase().split(';')[0].trim();
   if (!raw || raw === 'application/octet-stream') {
@@ -88,7 +61,16 @@ async function pollAnalyzeJob(statusUrl: string): Promise<PolledJob> {
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     const res = await fetch(statusUrl, { cache: 'no-store' });
     if (!res.ok) {
-      throw new Error(`Status poll failed (${res.status})`);
+      let serverError: string | null = null;
+      try {
+        const body = (await res.json()) as { error?: string; details?: string };
+        const details = typeof body.details === 'string' ? body.details : '';
+        const error = typeof body.error === 'string' ? body.error : '';
+        serverError = [error, details].filter(Boolean).join(': ') || null;
+      } catch {
+        // ignore malformed/non-JSON body
+      }
+      throw new Error(serverError ?? `Status poll failed (${res.status})`);
     }
     const body = (await res.json()) as PolledJob;
     if (body.status === 'done' || body.status === 'failed') return body;
@@ -190,14 +172,11 @@ export function UploadForm() {
         });
       } catch (err) {
         console.error('[upload-form] Blob upload failed:', err);
-        const msg = err instanceof Error ? err.message : '';
-        if (/quota|exceeded|maximum size/i.test(msg)) {
-          throw new Error(
-            `File is over ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB. Trim or re-export at a lower bitrate.`,
-          );
-        }
+        let msg = '';
+        if (err instanceof Error) msg = err.message;
+        else if (typeof err === 'string') msg = err;
         throw new Error(
-          'Could not upload your file. Check your connection and try again.',
+          friendlyUploadError(msg, Math.round(MAX_FILE_BYTES / 1024 / 1024)),
         );
       }
 
