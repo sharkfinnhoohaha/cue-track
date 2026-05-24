@@ -219,6 +219,13 @@ export async function POST(request: NextRequest) {
   }
 
   // --- Pick detector via A/B router + resolve worker URL/secret ---------
+  //
+  // The worker is preferred (Foote/ML detectors) but optional: when it is
+  // unconfigured, the job runs the in-process template analyzer instead of
+  // 503-ing. This keeps uploads working even with AUDIO_WORKER_URL unset,
+  // matching how /api/tracks/generate already falls back to in-process
+  // rendering. runAnalyzeJob also falls back in-process if a configured
+  // worker turns out to be unreachable at run time.
   const requestUrl = new URL(request.url);
   let method = pickMethod({ identifier: rateIdentifier, url: requestUrl });
   let workerCfg = workerForMethod(method);
@@ -227,14 +234,9 @@ export async function POST(request: NextRequest) {
     workerCfg = workerForMethod(method);
   }
   if (!workerCfg.url || !workerCfg.secret) {
-    return NextResponse.json(
-      {
-        error: 'Audio analysis is not configured',
-        details:
-          'AUDIO_WORKER_URL and AUDIO_WORKER_SHARED_SECRET must be set.',
-      },
-      { status: 503 },
-    );
+    // No worker available — analyze in-process with the template detector.
+    method = 'template';
+    workerCfg = { url: undefined, secret: undefined, path: '' };
   }
 
   const title = stripExtension(filename);
@@ -284,8 +286,8 @@ export async function POST(request: NextRequest) {
       method,
       identifier: rateIdentifier,
       userId,
-      workerUrl: workerCfg.url,
-      workerSecret: workerCfg.secret,
+      workerUrl: workerCfg.url ?? '',
+      workerSecret: workerCfg.secret ?? '',
       workerPath: workerCfg.path,
     }),
   );

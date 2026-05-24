@@ -22,6 +22,7 @@ import { del } from '@vercel/blob';
 import { db, analyzeJobs, tracks } from '@/lib/db';
 import type { AnalyzeJobResult } from '@/lib/db/schema';
 import { recordUploadAnalysis } from '@/lib/upload-quota';
+import { analyzeAudio } from '@/lib/audio/analyze';
 import type { SongSpec } from '@/types';
 
 export type AnalyzeMethod = 'template' | 'foote' | 'ml';
@@ -34,9 +35,25 @@ interface RunArgs {
   method: AnalyzeMethod;
   identifier: string;
   userId: string | null;
+  // Empty when no Cloud Run worker is configured — the runner then analyzes
+  // in-process instead of calling out.
   workerUrl: string;
   workerSecret: string;
   workerPath: string;
+}
+
+/**
+ * Worker failure that is NOT the user's fault — network/DNS/timeout, a 5xx,
+ * or an auth/secret mismatch. These are recoverable by analyzing in-process,
+ * so the runner falls back rather than failing the job. A bad-file error
+ * (decode failure, 415, malformed) is a plain Error and fails the job, since
+ * the in-process decoder would reject the same bytes.
+ */
+class WorkerInfraError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WorkerInfraError';
+  }
 }
 
 interface WorkerAnalyzeResponse {
@@ -115,9 +132,9 @@ async function callWorker(
     const cause = err instanceof Error ? err.message : String(err);
     console.error(`[analyze-jobs] Worker fetch failed (${url}):`, cause);
     if ((err as { name?: string })?.name === 'AbortError') {
-      throw new Error(`Worker request timed out after ${WORKER_TIMEOUT_MS}ms`);
+      throw new WorkerInfraError(`Worker request timed out after ${WORKER_TIMEOUT_MS}ms`);
     }
-    throw new Error(`Worker fetch failed: ${cause}`);
+    throw new WorkerInfraError(`Worker fetch failed: ${cause}`);
   }
   clearTimeout(timeoutId);
 
@@ -137,7 +154,12 @@ async function callWorker(
     console.error(
       `[analyze-jobs] Worker ${resp.status} from ${url}; body=${raw.slice(0, 500)}`,
     );
-    throw new Error(detail);
+    // 5xx, 401/403 (secret mismatch), and 502 blob-fetch failures are infra
+    // problems the in-process analyzer can recover from. A 4xx that reflects
+    // the file itself (415 unsupported, 422 decode) must fail the job.
+    const recoverable =
+      resp.status >= 500 || resp.status === 401 || resp.status === 403;
+    throw recoverable ? new WorkerInfraError(detail) : new Error(detail);
   }
 
   const bodyRes = (await resp.json()) as WorkerAnalyzeResponse;
@@ -161,6 +183,50 @@ async function deleteBlobSafely(url: string, jobId: string): Promise<void> {
   }
 }
 
+/**
+ * Worker-free analysis: download the blob and run the BPM + section detector
+ * inside the Vercel function. Used when no Cloud Run worker is configured, or
+ * as a fallback when a configured worker is unreachable.
+ */
+async function analyzeInProcess(args: RunArgs): Promise<WorkerAnalyzeResponse> {
+  const bytes = await downloadBlob(args.blobUrl);
+  const result = await analyzeAudio(bytes, args.mime);
+  return {
+    bpm: result.bpm,
+    duration: result.duration,
+    sampleRate: result.sampleRate,
+    suggestedSections: result.suggestedSections,
+  };
+}
+
+interface AnalysisOutcome {
+  worker: WorkerAnalyzeResponse;
+  method: AnalyzeMethod;
+}
+
+/**
+ * Produce the analysis, preferring a healthy Cloud Run worker and falling
+ * back to in-process analysis when the worker is unconfigured or unreachable.
+ * The returned method reflects what actually ran (in-process is 'template').
+ */
+async function resolveAnalysis(args: RunArgs): Promise<AnalysisOutcome> {
+  const workerConfigured = !!args.workerUrl && !!args.workerSecret;
+  if (!workerConfigured) {
+    return { worker: await analyzeInProcess(args), method: 'template' };
+  }
+  try {
+    return { worker: await callWorker(args), method: args.method };
+  } catch (err) {
+    if (err instanceof WorkerInfraError) {
+      console.warn(
+        `[analyze-jobs] Worker unavailable for ${args.jobId} (${err.message}); falling back to in-process analysis`,
+      );
+      return { worker: await analyzeInProcess(args), method: 'template' };
+    }
+    throw err;
+  }
+}
+
 export async function runAnalyzeJob(args: RunArgs): Promise<void> {
   // --- Claim the job (transition queued -> running) -------------------
   const claimed = await db
@@ -174,10 +240,9 @@ export async function runAnalyzeJob(args: RunArgs): Promise<void> {
     return;
   }
 
-  // --- Download blob + call worker + persist track + mark done --------
+  // --- Analyze (worker or in-process) + persist track + mark done -----
   try {
-    // Call worker directly with Vercel Blob URL to bypass 32 MB Cloud Run body limit
-    const worker = await callWorker(args);
+    const { worker, method } = await resolveAnalysis(args);
     const spec = buildSpec(args.title, worker);
     const durationSec = Math.max(1, Math.round(worker.duration));
 
@@ -205,7 +270,7 @@ export async function runAnalyzeJob(args: RunArgs): Promise<void> {
       duration: worker.duration,
       sampleRate: worker.sampleRate,
       suggestedSections: worker.suggestedSections,
-      method: args.method,
+      method,
     };
 
     await db
@@ -225,7 +290,7 @@ export async function runAnalyzeJob(args: RunArgs): Promise<void> {
     }
 
     console.log(
-      `[analyze-jobs] Job ${args.jobId} done: trackId=${trackId} method=${args.method} bpm=${worker.bpm} sections=${worker.suggestedSections.length}`,
+      `[analyze-jobs] Job ${args.jobId} done: trackId=${trackId} method=${method} bpm=${worker.bpm} sections=${worker.suggestedSections.length}`,
     );
   } catch (err) {
     const errorText = err instanceof Error ? err.message : String(err);

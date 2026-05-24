@@ -46,8 +46,10 @@ Files:
 
 - `src/components/upload-form.tsx` — client. Calls `upload()` from `@vercel/blob/client`, then POSTs `{ blobUrl, contentType, filename, size }` to `/api/tracks/analyze`, then polls the returned `statusUrl`.
 - `src/app/api/tracks/analyze/upload/route.ts` — token broker for Vercel Blob client uploads. Auth + identifier check; signs an upload token scoped to the audio MIME allowlist (`audio/mpeg`, `audio/mp3`, `audio/wav`, `audio/x-wav`, `audio/wave`, `audio/vnd.wave`) and 150 MB max.
-- `src/app/api/tracks/analyze/route.ts` — enqueue endpoint. Validates blob URL host (must be `*.blob.vercel-storage.com`), runs rate-limit + quota + worker-config checks, inserts an `analyze_jobs` row, and kicks off `runAnalyzeJob` via `waitUntil`.
-- `src/lib/analyze-jobs.ts` — background runner. Atomically claims the job (`queued`→`running`), downloads the blob (60s timeout), POSTs raw bytes to the worker with `X-Worker-Secret` header, builds the `SongSpec`, inserts the draft `tracks` row, marks the job `done`. Deletes the blob in a `finally` so success and failure both clean up.
+- `src/app/api/tracks/analyze/route.ts` — enqueue endpoint. Validates blob URL host (must be `*.blob.vercel-storage.com`), runs rate-limit + quota checks, inserts an `analyze_jobs` row, and kicks off `runAnalyzeJob` via `waitUntil`. The worker is optional: when `AUDIO_WORKER_URL`/secret are unset it enqueues with `method: 'template'` (in-process) instead of 503-ing.
+- `src/lib/analyze-jobs.ts` — background runner. Atomically claims the job (`queued`→`running`), runs the detector, builds the `SongSpec`, inserts the draft `tracks` row, marks the job `done`. Deletes the blob in a `finally` so success and failure both clean up. **Worker is optional and resilient:** when configured + healthy it sends `{ blobUrl, mime }` JSON and the worker fetches the blob itself (bypasses Cloud Run's 32 MB body cap). When the worker is unset, or a configured worker is *unreachable* (network/DNS/timeout, 5xx, 401/403 — surfaced as `WorkerInfraError`), the runner downloads the blob and analyzes in-process via `src/lib/audio/analyze.ts`. Only a genuine bad-file error (decode/415/422) fails the job, since the in-process decoder would reject the same bytes.
+- `src/lib/audio/analyze.ts` — in-process detector (port of the worker's `analyze.ts`): decode MP3/WAV, music-tempo BPM, duration-banded section template. The worker-free fallback for the analyze pipeline, mirroring how `/api/tracks/generate` falls back to in-process rendering.
+- `src/app/api/health/worker/route.ts` — diagnostic. Reports whether `AUDIO_WORKER_URL`/`ML_WORKER_URL` are set and pings their `/health`. Use it to tell "worker unreachable" apart from "worker unset" instead of inferring from a generic UI error.
 - `src/app/api/tracks/analyze/jobs/[id]/route.ts` — poll endpoint. Returns `{ status, result, error }`. Identifier guard returns 404 (not 403) for jobs the caller didn't enqueue.
 - `src/lib/analyze-router.ts` — picks `template | foote | ml` per caller-stable hash (`ANALYZE_AB_SPLIT_PERCENT`). ML disabled by default; falls back to Foote when `ML_WORKER_URL` is unset.
 
@@ -94,8 +96,8 @@ Required for the analyze flow:
 
 - `DATABASE_URL` — Neon pooled connection string
 - `BLOB_READ_WRITE_TOKEN` — Vercel Blob (Storage → Create → Blob in the dashboard)
-- `AUDIO_WORKER_URL` + `AUDIO_WORKER_SHARED_SECRET` — Cloud Run audio worker
 - `RATE_LIMIT_IP_SALT` — salt for anon IP hashing
+- Optional: `AUDIO_WORKER_URL` + `AUDIO_WORKER_SHARED_SECRET` — Cloud Run audio worker. **Not required:** when unset (or unreachable), analysis runs in-process via `src/lib/audio/analyze.ts`. Wire it only to get the Foote detector or to offload heavy work off the Vercel function.
 - Optional: `ML_WORKER_URL` + `ML_WORKER_SHARED_SECRET`, `ANALYZE_AB_SPLIT_PERCENT`
 
 Full list with descriptions in `.env.local.example`.
