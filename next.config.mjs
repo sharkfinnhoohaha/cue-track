@@ -4,7 +4,13 @@ import { withSentryConfig } from '@sentry/nextjs';
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
-    serverComponentsExternalPackages: ['@google-cloud/text-to-speech', 'lamejs'],
+    serverComponentsExternalPackages: [
+      '@google-cloud/text-to-speech',
+      'lamejs',
+      'mpg123-decoder',
+      'music-tempo',
+      'wavefile',
+    ],
   },
 };
 

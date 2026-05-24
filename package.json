@@ -30,6 +30,8 @@
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.38.3",
     "lamejs": "^1.2.1",
+    "mpg123-decoder": "^1.0.3",
+    "music-tempo": "^1.0.3",
     "next": "14.2.35",
     "next-auth": "^5.0.0-beta.25",
     "nodemailer": "^7.0.7",
@@ -38,6 +40,7 @@
     "resend": "^4.1.2",
     "stripe": "~17.7.0",
     "tailwind-merge": "^2.6.0",
+    "wavefile": "^11.0.0",
     "wavesurfer.js": "^7.8.12"
   },
   "devDependencies": {

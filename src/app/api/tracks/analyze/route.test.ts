@@ -203,11 +203,16 @@ describe('POST /api/tracks/analyze (async, blob-uploaded)', () => {
     expect(mockWaitUntil).not.toHaveBeenCalled();
   });
 
-  it('returns 503 when worker env vars are missing', async () => {
+  it('falls back to in-process analysis when worker env vars are missing', async () => {
     delete process.env.AUDIO_WORKER_URL;
+    delete process.env.AUDIO_WORKER_SHARED_SECRET;
     const res = await POST(makeRequest());
-    expect(res.status).toBe(503);
-    expect(mockWaitUntil).not.toHaveBeenCalled();
+    expect(res.status).toBe(202);
+    expect(mockWaitUntil).toHaveBeenCalledTimes(1);
+    const runArgs = mockRunAnalyzeJob.mock.calls[0]?.[0];
+    expect(runArgs?.method).toBe('template');
+    expect(runArgs?.workerUrl).toBe('');
+    expect(runArgs?.workerSecret).toBe('');
   });
 
   it('returns 500 when the DB insert returns no rows', async () => {
