@@ -77,7 +77,6 @@ export function encodeMp3(
   channels: number
 ): Buffer {
   // Dynamic require for lamejs (CommonJS module)
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   let lamejs: typeof import('lamejs');
   try {
     lamejs = require('lamejs');

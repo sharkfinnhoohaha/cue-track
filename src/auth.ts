@@ -59,7 +59,6 @@ function buildAuthConfig(): NextAuthConfig {
   if (process.env.DATABASE_URL) {
     try {
       // Deferred require so missing DATABASE_URL at import time does not crash.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { db } = require('@/lib/db') as { db: Parameters<typeof DrizzleAdapter>[0] };
       adapter = DrizzleAdapter(db);
     } catch (err) {
