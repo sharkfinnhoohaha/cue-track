@@ -46,7 +46,7 @@ import path from 'path';
     // Wait for the download generation.
     console.log('Waiting for generation process...');
     // We should see a generation progress or finally a download button.
-    const downloadLink = await page.waitForSelector('text="Download"', { state: 'visible', timeout: 120000 });
+    const downloadLink = await page.waitForSelector('button:has-text("Download")', { state: 'visible', timeout: 120000 });
     console.log('Download link generated successfully!');
 
     console.log('Smoke test passed successfully! End-to-end workflow is functional.');
