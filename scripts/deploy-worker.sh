@@ -20,8 +20,9 @@ fi
 # 2. Let user select the project
 echo ""
 echo "Fetching your Google Cloud Projects..."
-# Temporarily unset the active project config to avoid PERMISSION_DENIED on the previous project context
+# Temporarily unset the active project config and quota project to avoid PERMISSION_DENIED on the previous project context
 gcloud config unset project >/dev/null 2>&1 || true
+gcloud config unset billing/quota_project >/dev/null 2>&1 || true
 gcloud projects list --format="table(projectId,name)"
 echo ""
 read -p "Enter the PROJECT_ID that has your $300 credits: " PROJECT_ID
