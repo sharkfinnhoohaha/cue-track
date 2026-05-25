@@ -25,7 +25,7 @@ gcloud config unset project >/dev/null 2>&1 || true
 gcloud config unset billing/quota_project >/dev/null 2>&1 || true
 gcloud projects list --format="table(projectId,name)"
 echo ""
-read -p "Enter the PROJECT_ID that has your $300 credits: " PROJECT_ID
+read -p "Enter the PROJECT_ID that has your \$300 credits: " PROJECT_ID
 
 echo ""
 echo "Setting active project to $PROJECT_ID..."
