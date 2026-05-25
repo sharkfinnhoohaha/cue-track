@@ -208,13 +208,37 @@ function cosineSim(a: Float32Array, b: Float32Array): number {
 
 function buildSsm(frames: Float32Array[]): Float32Array {
   const n = frames.length;
+  const dim = frames[0]?.length ?? 0;
+  
+  // 1. Pre-normalize frames to unit length so that cosine similarity
+  // is simplified to a direct dot product in the inner loop.
+  const normFrames = frames.map(f => {
+    let sumSq = 0;
+    for (let k = 0; k < dim; k++) {
+      sumSq += f[k] * f[k];
+    }
+    const norm = Math.sqrt(sumSq);
+    if (norm === 0) return f;
+    const normalized = new Float32Array(dim);
+    for (let k = 0; k < dim; k++) {
+      normalized[k] = f[k] / norm;
+    }
+    return normalized;
+  });
+
+  // 2. Compute dot products
   const ssm = new Float32Array(n * n);
   for (let i = 0; i < n; i++) {
+    const fI = normFrames[i]!;
     ssm[i * n + i] = 1;
     for (let j = i + 1; j < n; j++) {
-      const s = cosineSim(frames[i], frames[j]);
-      ssm[i * n + j] = s;
-      ssm[j * n + i] = s;
+      const fJ = normFrames[j]!;
+      let dot = 0;
+      for (let k = 0; k < dim; k++) {
+        dot += fI[k] * fJ[k];
+      }
+      ssm[i * n + j] = dot;
+      ssm[j * n + i] = dot;
     }
   }
   return ssm;

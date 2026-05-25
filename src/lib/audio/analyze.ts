@@ -70,11 +70,89 @@ function downmixToMono(channels: Float32Array[]): Float32Array {
 
 function decodeWav(bytes: Buffer): DecodedAudio {
   const wav = new WaveFile(new Uint8Array(bytes));
-  // Normalize to 32-bit float so getSamples returns values in [-1, 1].
-  wav.toBitDepth('32f');
-  const fmt = wav.fmt as { sampleRate: number; numChannels: number };
+  const fmt = wav.fmt as { sampleRate: number; numChannels: number; bitsPerSample: number; audioFormat: number };
   const sampleRate = Number(fmt.sampleRate);
   const numChannels = Number(fmt.numChannels) || 1;
+  const bitsPerSample = Number(fmt.bitsPerSample);
+  const audioFormat = Number(fmt.audioFormat);
+
+  // 16-bit signed PCM Fast Path
+  if (audioFormat === 1 && bitsPerSample === 16 && wav.data && wav.data.samples) {
+    const rawSamples = wav.data.samples;
+    let buffer = rawSamples.buffer;
+    let byteOffset = rawSamples.byteOffset;
+    if (byteOffset % 2 !== 0) {
+      const copy = new Uint8Array(rawSamples.length);
+      copy.set(rawSamples);
+      buffer = copy.buffer;
+      byteOffset = copy.byteOffset;
+    }
+    const rawInt16 = new Int16Array(buffer, byteOffset, rawSamples.length / 2);
+    const numSamplesPerChannel = Math.floor(rawInt16.length / numChannels);
+    const mono = new Float32Array(numSamplesPerChannel);
+
+    if (numChannels === 1) {
+      for (let i = 0; i < numSamplesPerChannel; i++) {
+        const val = rawInt16[i]!;
+        mono[i] = val < 0 ? val / 32768 : val / 32767;
+      }
+    } else if (numChannels === 2) {
+      for (let i = 0; i < numSamplesPerChannel; i++) {
+        const val1 = rawInt16[i * 2]!;
+        const val2 = rawInt16[i * 2 + 1]!;
+        const avg = (val1 + val2) / 2;
+        mono[i] = avg < 0 ? avg / 32768 : avg / 32767;
+      }
+    } else {
+      for (let i = 0; i < numSamplesPerChannel; i++) {
+        let sum = 0;
+        for (let c = 0; c < numChannels; c++) {
+          sum += rawInt16[i * numChannels + c]!;
+        }
+        const avg = sum / numChannels;
+        mono[i] = avg < 0 ? avg / 32768 : avg / 32767;
+      }
+    }
+    return { monoSamples: mono, sampleRate, duration: mono.length / sampleRate };
+  }
+
+  // 32-bit float PCM Fast Path
+  if (audioFormat === 3 && bitsPerSample === 32 && wav.data && wav.data.samples) {
+    const rawSamples = wav.data.samples;
+    let buffer = rawSamples.buffer;
+    let byteOffset = rawSamples.byteOffset;
+    if (byteOffset % 4 !== 0) {
+      const copy = new Uint8Array(rawSamples.length);
+      copy.set(rawSamples);
+      buffer = copy.buffer;
+      byteOffset = copy.byteOffset;
+    }
+    const rawFloat32 = new Float32Array(buffer, byteOffset, rawSamples.length / 4);
+    const numSamplesPerChannel = Math.floor(rawFloat32.length / numChannels);
+    const mono = new Float32Array(numSamplesPerChannel);
+
+    if (numChannels === 1) {
+      mono.set(rawFloat32);
+    } else if (numChannels === 2) {
+      for (let i = 0; i < numSamplesPerChannel; i++) {
+        const val1 = rawFloat32[i * 2]!;
+        const val2 = rawFloat32[i * 2 + 1]!;
+        mono[i] = (val1 + val2) / 2;
+      }
+    } else {
+      for (let i = 0; i < numSamplesPerChannel; i++) {
+        let sum = 0;
+        for (let c = 0; c < numChannels; c++) {
+          sum += rawFloat32[i * numChannels + c]!;
+        }
+        mono[i] = sum / numChannels;
+      }
+    }
+    return { monoSamples: mono, sampleRate, duration: mono.length / sampleRate };
+  }
+
+  // Standard fallback
+  wav.toBitDepth('32f');
   const deinterleaved = wav.getSamples(false, Float32Array) as unknown as
     | Float32Array
     | Float32Array[];
