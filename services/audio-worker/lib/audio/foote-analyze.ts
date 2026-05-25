@@ -36,8 +36,7 @@ const MEL_BANDS = 40;
 const MEL_FMIN = 80;
 const MEL_FMAX_RATIO = 0.5;
 const KERNEL_SIZE = 64;
-const MIN_PEAK_GAP_SEC = 8;
-const PEAK_THRESHOLD_K = 2.5;
+const PEAK_THRESHOLD_K = 3.0;
 
 // --- FFT ---
 
@@ -313,12 +312,20 @@ interface Peak {
 function pickPeaks(
   novelty: Float32Array,
   sampleRate: number,
+  bpm = 120,
 ): Peak[] {
   const med = median(novelty);
   const mad = medianAbsDev(novelty, med);
   const threshold = med + PEAK_THRESHOLD_K * mad;
   const secondsPerFrame = HOP_SIZE / sampleRate;
-  const minGapFrames = Math.max(1, Math.round(MIN_PEAK_GAP_SEC / secondsPerFrame));
+  const secondsPerBar = 240 / Math.max(bpm, 30);
+  const minGapBars = bpm < 85 ? 6 : 8;
+  let minGapSec = Math.max(12, minGapBars * secondsPerBar);
+  const totalDuration = novelty.length * secondsPerFrame;
+  if (totalDuration < 60) {
+    minGapSec = Math.min(minGapSec, totalDuration / 4);
+  }
+  const minGapFrames = Math.max(1, Math.round(minGapSec / secondsPerFrame));
   const candidates: Peak[] = [];
   for (let i = 1; i < novelty.length - 1; i++) {
     const v = novelty[i];
@@ -355,14 +362,55 @@ function makeSectionId(idx: number): string {
   return `s-${Date.now()}-${idx}`;
 }
 
+function computeSectionRms(
+  samples: Float32Array,
+  sampleRate: number,
+  startSec: number,
+  endSec: number,
+): number {
+  const startIdx = Math.floor(startSec * sampleRate);
+  const endIdx = Math.min(samples.length, Math.floor(endSec * sampleRate));
+  if (endIdx <= startIdx) return 0;
+  
+  let sumSq = 0;
+  for (let i = startIdx; i < endIdx; i++) {
+    const val = samples[i]!;
+    sumSq += val * val;
+  }
+  return Math.sqrt(sumSq / (endIdx - startIdx));
+}
+
 function sectionsFromBoundaries(
   boundariesSec: number[],
   durationSec: number,
   bpm: number,
+  samples?: Float32Array,
+  sampleRate?: number,
 ): SuggestedSection[] {
   const beatsPerBar = 4;
   const secondsPerBar = (beatsPerBar * 60) / Math.max(bpm, 30);
-  const points = [0, ...boundariesSec, durationSec];
+  const secondsPer2Bars = secondsPerBar * 2;
+
+  // Snap all boundaries to the nearest 2-bar boundary
+  const snappedBoundaries = boundariesSec.map((b) => {
+    return Math.round(b / secondsPer2Bars) * secondsPer2Bars;
+  });
+
+  // Deduplicate and filter out boundaries close to 0 or duration
+  const uniqueBoundaries: number[] = [];
+  const minDistanceSec = 4 * secondsPerBar; // Minimum 4 bars for a section
+  for (const b of snappedBoundaries) {
+    if (b < minDistanceSec || b > durationSec - minDistanceSec) continue;
+    if (uniqueBoundaries.length > 0) {
+      const prev = uniqueBoundaries[uniqueBoundaries.length - 1]!;
+      if (b - prev < minDistanceSec) {
+        continue;
+      }
+    }
+    uniqueBoundaries.push(b);
+  }
+
+  const points = [0, ...uniqueBoundaries, durationSec];
   const sections: SuggestedSection[] = [];
   for (let i = 0; i < points.length - 1; i++) {
     const span = points[i + 1] - points[i];
@@ -374,6 +422,51 @@ function sectionsFromBoundaries(
       bars,
     });
   }
+
+  // Dynamic RMS Volume-Based Labeling if audio data is provided
+  if (samples && sampleRate && sections.length > 2) {
+    const rmsValues = sections.map((sec, idx) => {
+      const startSec = points[idx]!;
+      const endSec = points[idx + 1]!;
+      return computeSectionRms(samples, sampleRate, startSec, endSec);
+    });
+
+    const midRms = rmsValues.slice(1, -1);
+    const minRms = Math.min(...midRms);
+    const maxRms = Math.max(...midRms);
+    const range = maxRms - minRms;
+
+    // Only use RMS-based labeling if we have a non-trivial range
+    if (range >= 0.005) {
+      const threshold = minRms + range * 0.5;
+      
+      // 1. Initial tentative classification: Chorus vs Verse
+      const tentativeLabels = sections.map((sec, idx) => {
+        if (idx === 0) return 'Intro';
+        if (idx === sections.length - 1) return 'Outro';
+        return rmsValues[idx]! >= threshold ? 'Chorus' : 'Verse';
+      });
+
+      // 2. Identify Bridge: 
+      // If a section is in the second half, labeled Verse, preceded by a Chorus, it is a Bridge.
+      const refinedLabels = [...tentativeLabels];
+      for (let i = 1; i < sections.length - 1; i++) {
+        if (
+          tentativeLabels[i] === 'Verse' &&
+          i >= Math.floor(sections.length / 2) &&
+          refinedLabels[i - 1] === 'Chorus'
+        ) {
+          refinedLabels[i] = 'Bridge';
+        }
+      }
+
+      // Apply the refined labels
+      for (let i = 0; i < sections.length; i++) {
+        sections[i]!.name = refinedLabels[i]!;
+      }
+    }
+  }
+
   return sections.length > 0
     ? sections
     : [{ id: makeSectionId(0), name: 'Loop', bars: 1 }];
@@ -420,7 +513,7 @@ export async function footeAnalyze(
   const novelty = convolveNovelty(ssm, frames.length);
   const t4 = Date.now();
 
-  const peaks = pickPeaks(novelty, decoded.sampleRate);
+  const peaks = pickPeaks(novelty, decoded.sampleRate, bpm);
   const t5 = Date.now();
 
   const peakTimes = peaks.map((p) => p.timeSec);
@@ -428,6 +521,8 @@ export async function footeAnalyze(
     peakTimes,
     decoded.duration,
     bpm,
+    decoded.monoSamples,
+    decoded.sampleRate,
   );
 
   const med = median(novelty);
