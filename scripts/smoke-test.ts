@@ -35,10 +35,10 @@ import path from 'path';
 
     // Check if the sections are rendered.
     console.log('Waiting for the review page to render sections...');
-    await page.waitForSelector('text="Continue to Download"', { state: 'visible', timeout: 30000 });
+    await page.waitForSelector('text="Finalize cue track"', { state: 'visible', timeout: 30000 });
     
-    console.log('Sections likely rendered successfully. Clicking "Continue to Download"...');
-    const continueBtn = await page.$('text="Continue to Download"');
+    console.log('Sections likely rendered successfully. Clicking "Finalize cue track"...');
+    const continueBtn = await page.$('text="Finalize cue track"');
     if (continueBtn) {
        await continueBtn.click();
     }
