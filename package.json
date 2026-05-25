@@ -27,6 +27,7 @@
     "@sentry/nextjs": "^8.47.0",
     "@vercel/blob": "^2.4.0",
     "@vercel/functions": "^3.6.0",
+    "@vercel/speed-insights": "^2.0.0",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.38.3",
     "lamejs": "^1.2.1",
