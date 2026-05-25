@@ -28,7 +28,7 @@ export default function AuthErrorPage({
       <Nav />
       <main className="mx-auto max-w-md px-4 sm:px-6 lg:px-8 pt-28 pb-20">
         <div className="mb-10">
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#F0EDE6] sm:text-5xl">
+          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
             Sign-in error
           </h1>
           <p className="mt-3 text-muted text-lg leading-relaxed">{message}</p>
@@ -36,7 +36,7 @@ export default function AuthErrorPage({
 
         <Link
           href="/auth/signin"
-          className="inline-flex items-center rounded-md bg-[#C8A250] px-4 py-3 font-medium text-black transition hover:bg-[#d4b46c]"
+          className="inline-flex items-center btn btn-primary rounded-lg py-3 px-5 text-sm font-semibold"
         >
           Try signing in again
         </Link>

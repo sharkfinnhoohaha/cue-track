@@ -292,7 +292,7 @@ export default function TrackDetailPage() {
         <Nav />
         <main className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
           <div className="text-center py-20">
-            <h1 className="font-display text-3xl font-semibold text-[#F0EDE6] mb-3">Track Not Found</h1>
+            <h1 className="font-display text-3xl font-semibold text-[#1d1d1f] mb-3">Track Not Found</h1>
             <p className="text-muted mb-6">{error || 'The track you are looking for does not exist.'}</p>
             <a href="/create"><Button variant="primary">Create a New Track</Button></a>
           </div>
@@ -321,7 +321,7 @@ export default function TrackDetailPage() {
             </span>
             <span className="badge badge-muted font-mono uppercase">{track.spec.format}</span>
           </div>
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#F0EDE6] sm:text-5xl">{track.title}</h1>
+          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">{track.title}</h1>
           <p className="mt-2 text-sm text-muted">Created {createdDate}</p>
         </div>
 
@@ -333,17 +333,17 @@ export default function TrackDetailPage() {
           <Card className="mb-8">
             <div className="flex flex-col items-center py-8 text-center">
               <div className="mb-4 h-10 w-10 animate-spin rounded-full border-2 border-surface-border border-t-accent" />
-              <p className="text-sm text-[#F0EDE6] font-medium">Generating your track...</p>
+              <p className="text-sm text-[#1d1d1f] font-medium">Generating your track...</p>
               <p className="text-xs text-muted mt-1">This usually takes a few seconds.</p>
             </div>
           </Card>
         )}
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">BPM</p><p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">{track.spec.bpm}</p></div></Card>
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Time Sig</p><p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">{tsLabel}</p></div></Card>
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Sections</p><p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">{track.spec.sections.length}</p></div></Card>
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Duration</p><p className="font-mono text-2xl font-bold text-[#F0EDE6] mt-1">{track.duration ? `${Math.floor(track.duration / 60)}:${String(Math.floor(track.duration % 60)).padStart(2, '0')}` : '--:--'}</p></div></Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">BPM</p><p className="font-mono text-2xl font-bold text-[#1d1d1f] mt-1">{track.spec.bpm}</p></div></Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Time Sig</p><p className="font-mono text-2xl font-bold text-[#1d1d1f] mt-1">{tsLabel}</p></div></Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Sections</p><p className="font-mono text-2xl font-bold text-[#1d1d1f] mt-1">{track.spec.sections.length}</p></div></Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Duration</p><p className="font-mono text-2xl font-bold text-[#1d1d1f] mt-1">{track.duration ? `${Math.floor(track.duration / 60)}:${String(Math.floor(track.duration % 60)).padStart(2, '0')}` : '--:--'}</p></div></Card>
         </div>
 
         <Card header="Section Breakdown" className="mb-8">
@@ -352,7 +352,7 @@ export default function TrackDetailPage() {
               <div key={section.id || i} className="flex items-center justify-between rounded-lg bg-surface px-4 py-2.5 border border-surface-border">
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-xs text-muted w-6 text-center">{i + 1}</span>
-                  <span className="text-sm font-medium text-[#F0EDE6]">{section.name}</span>
+                  <span className="text-sm font-medium text-[#1d1d1f]">{section.name}</span>
                 </div>
                 <span className="font-mono text-xs text-muted">{section.bars} bars</span>
               </div>

@@ -99,7 +99,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
         onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between py-5 text-left"
       >
-        <span className="text-sm font-medium text-[#F0EDE6] pr-4">{q}</span>
+        <span className="text-sm font-medium text-[#1d1d1f] pr-4">{q}</span>
         <svg
           className={cn(
             'h-4 w-4 text-muted flex-shrink-0 transition-transform duration-200',
@@ -131,7 +131,7 @@ export default function PricingPage() {
       <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
         {/* Header */}
         <div className="text-center mb-16">
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#F0EDE6] sm:text-5xl">
+          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
             Simple, transparent pricing
           </h1>
           <p className="mt-4 text-lg text-muted max-w-xl mx-auto">
@@ -159,13 +159,13 @@ export default function PricingPage() {
                 </div>
               )}
 
-              <h2 className="font-display text-2xl font-semibold text-[#F0EDE6]">
+              <h2 className="font-display text-2xl font-semibold text-[#1d1d1f]">
                 {plan.name}
               </h2>
               <p className="mt-1 text-sm text-muted">{plan.description}</p>
 
               <div className="mt-6 flex items-baseline gap-1">
-                <span className="font-display text-5xl font-bold text-[#F0EDE6]">
+                <span className="font-display text-5xl font-bold text-[#1d1d1f]">
                   {plan.price}
                 </span>
                 <span className="text-muted text-sm">{plan.period}</span>
@@ -175,7 +175,7 @@ export default function PricingPage() {
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-start gap-2.5">
                     <CheckIcon />
-                    <span className="text-sm text-[#C0BDB6]">{feature}</span>
+                    <span className="text-sm text-[#6e6e73]">{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -197,7 +197,7 @@ export default function PricingPage() {
 
         {/* FAQ */}
         <div className="max-w-2xl mx-auto">
-          <h2 className="font-display text-3xl font-semibold tracking-tight text-[#F0EDE6] text-center mb-10">
+          <h2 className="font-display text-3xl font-semibold tracking-tight text-[#1d1d1f] text-center mb-10">
             Frequently Asked Questions
           </h2>
           <div>

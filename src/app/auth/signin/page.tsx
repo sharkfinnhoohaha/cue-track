@@ -21,7 +21,7 @@ export default function SignInPage() {
       <Nav />
       <main className="mx-auto max-w-md px-4 sm:px-6 lg:px-8 pt-28 pb-20">
         <div className="mb-10">
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#F0EDE6] sm:text-5xl">
+          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
             Sign in
           </h1>
           <p className="mt-3 text-muted text-lg leading-relaxed">
@@ -40,11 +40,11 @@ export default function SignInPage() {
             required
             autoComplete="email"
             placeholder="you@example.com"
-            className="w-full rounded-md border border-white/10 bg-black/30 px-4 py-3 text-[#F0EDE6] placeholder:text-muted/50 focus:border-[#C8A250] focus:outline-none"
+            className="input px-4 py-3"
           />
           <button
             type="submit"
-            className="rounded-md bg-[#C8A250] px-4 py-3 font-medium text-black transition hover:bg-[#d4b46c]"
+            className="w-full btn btn-primary rounded-lg py-3 text-sm font-semibold"
           >
             Send sign-in link
           </button>

@@ -144,10 +144,16 @@ function hannWindow(size: number): Float32Array {
   return w;
 }
 
-function extractLogMelFrames(
+interface ExtractedFeatures {
+  melFrames: Float32Array[];
+  chromaFrames: Float32Array[];
+  hfcFrames: Float32Array;
+}
+
+function extractAllFeatures(
   samples: Float32Array,
   sampleRate: number,
-): Float32Array[] {
+): ExtractedFeatures {
   const fMax = sampleRate * MEL_FMAX_RATIO;
   const filterbank = buildMelFilterbank(
     sampleRate,
@@ -161,10 +167,29 @@ function extractLogMelFrames(
     1,
     Math.floor((samples.length - FRAME_SIZE) / HOP_SIZE) + 1,
   );
-  const frames: Float32Array[] = [];
+  
+  const melFrames: Float32Array[] = [];
+  const chromaFrames: Float32Array[] = [];
+  const hfcFrames = new Float32Array(numFrames);
+  
   const real = new Float32Array(FRAME_SIZE);
   const imag = new Float32Array(FRAME_SIZE);
   const power = new Float32Array(filterbank.numBins);
+  
+  const binPitchClasses = new Int8Array(filterbank.numBins);
+  const validChromaBins = new Uint8Array(filterbank.numBins);
+  for (let k = 0; k < filterbank.numBins; k++) {
+    const hz = (k * sampleRate) / FRAME_SIZE;
+    if (hz >= 80 && hz <= 2000) {
+      const midi = 12 * Math.log2(hz / 440) + 69;
+      binPitchClasses[k] = Math.round(midi) % 12;
+      validChromaBins[k] = 1;
+    } else {
+      binPitchClasses[k] = -1;
+      validChromaBins[k] = 0;
+    }
+  }
+
   for (let f = 0; f < numFrames; f++) {
     const offset = f * HOP_SIZE;
     for (let i = 0; i < FRAME_SIZE; i++) {
@@ -173,9 +198,15 @@ function extractLogMelFrames(
       imag[i] = 0;
     }
     fft(real, imag);
+    
+    let frameHfc = 0;
     for (let k = 0; k < filterbank.numBins; k++) {
-      power[k] = real[k] * real[k] + imag[k] * imag[k];
+      const p = real[k] * real[k] + imag[k] * imag[k];
+      power[k] = p;
+      frameHfc += k * p;
     }
+    hfcFrames[f] = frameHfc;
+    
     const logMel = new Float32Array(MEL_BANDS);
     for (let b = 0; b < MEL_BANDS; b++) {
       const filter = filterbank.filters[b];
@@ -185,9 +216,37 @@ function extractLogMelFrames(
       }
       logMel[b] = Math.log(energy + 1e-10);
     }
-    frames.push(logMel);
+    melFrames.push(logMel);
+    
+    const chroma = new Float32Array(12);
+    for (let k = 0; k < filterbank.numBins; k++) {
+      if (validChromaBins[k] === 1) {
+        const pc = binPitchClasses[k];
+        chroma[pc] += power[k];
+      }
+    }
+    
+    let sumSq = 0;
+    for (let c = 0; c < 12; c++) {
+      sumSq += chroma[c] * chroma[c];
+    }
+    const norm = Math.sqrt(sumSq);
+    if (norm > 0) {
+      for (let c = 0; c < 12; c++) {
+        chroma[c] /= norm;
+      }
+    }
+    chromaFrames.push(chroma);
   }
-  return frames;
+  
+  return { melFrames, chromaFrames, hfcFrames };
+}
+
+function extractLogMelFrames(
+  samples: Float32Array,
+  sampleRate: number,
+): Float32Array[] {
+  return extractAllFeatures(samples, sampleRate).melFrames;
 }
 
 // --- SSM + novelty ---
@@ -386,6 +445,9 @@ function sectionsFromBoundaries(
   bpm: number,
   samples?: Float32Array,
   sampleRate?: number,
+  melFrames?: Float32Array[],
+  chromaFrames?: Float32Array[],
+  hfcFrames?: Float32Array,
 ): SuggestedSection[] {
   const beatsPerBar = 4;
   const secondsPerBar = (beatsPerBar * 60) / Math.max(bpm, 30);
@@ -423,36 +485,168 @@ function sectionsFromBoundaries(
     });
   }
 
-  // Dynamic RMS Volume-Based Labeling if audio data is provided
+  // Dynamic RMS + HFC Volume/Percussion and Cross-Section Repetition Labeler
   if (samples && sampleRate && sections.length > 2) {
-    const rmsValues = sections.map((sec, idx) => {
+    const numFrames = chromaFrames ? chromaFrames.length : 0;
+    const secondsPerFrame = HOP_SIZE / sampleRate;
+
+    interface SectionFeatures {
+      avgMel: Float32Array;
+      avgChroma: Float32Array;
+      avgHfc: number;
+      avgRms: number;
+    }
+
+    const sectionFeaturesList: SectionFeatures[] = [];
+    for (let idx = 0; idx < sections.length; idx++) {
       const startSec = points[idx]!;
       const endSec = points[idx + 1]!;
-      return computeSectionRms(samples, sampleRate, startSec, endSec);
-    });
 
-    const midRms = rmsValues.slice(1, -1);
-    const minRms = Math.min(...midRms);
-    const maxRms = Math.max(...midRms);
-    const range = maxRms - minRms;
+      const startFrame = Math.floor(startSec / secondsPerFrame);
+      const endFrame = Math.min(numFrames, Math.floor(endSec / secondsPerFrame));
+      const numSecFrames = endFrame - startFrame;
 
-    // Only use RMS-based labeling if we have a non-trivial range
-    if (range >= 0.005) {
-      const threshold = minRms + range * 0.5;
-      
-      // 1. Initial tentative classification: Chorus vs Verse
-      const tentativeLabels = sections.map((sec, idx) => {
+      const avgMel = new Float32Array(MEL_BANDS);
+      const avgChroma = new Float32Array(12);
+      let sumHfc = 0;
+
+      if (numSecFrames > 0 && melFrames && chromaFrames && hfcFrames) {
+        for (let f = startFrame; f < endFrame; f++) {
+          const melF = melFrames[f]!;
+          const chromaF = chromaFrames[f]!;
+          for (let b = 0; b < MEL_BANDS; b++) avgMel[b] += melF[b];
+          for (let c = 0; c < 12; c++) avgChroma[c] += chromaF[c];
+          sumHfc += hfcFrames[f]!;
+        }
+        for (let b = 0; b < MEL_BANDS; b++) avgMel[b] /= numSecFrames;
+        for (let c = 0; c < 12; c++) avgChroma[c] /= numSecFrames;
+      }
+
+      // Normalize average Chroma
+      let sumSq = 0;
+      for (let c = 0; c < 12; c++) sumSq += avgChroma[c] * avgChroma[c];
+      const norm = Math.sqrt(sumSq);
+      if (norm > 0) {
+        for (let c = 0; c < 12; c++) avgChroma[c] /= norm;
+      }
+
+      const avgRms = computeSectionRms(samples, sampleRate, startSec, endSec);
+      const avgHfc = numSecFrames > 0 ? sumHfc / numSecFrames : 0;
+
+      sectionFeaturesList.push({ avgMel, avgChroma, avgHfc, avgRms });
+    }
+
+    const numMid = sections.length - 2;
+
+    if (numMid > 0 && melFrames && chromaFrames && hfcFrames) {
+      // 1. Cross-Section Repetitive Structure Clustering (Greedy single-linkage)
+      const clusterIds = new Int32Array(numMid).fill(-1);
+      let nextClusterId = 0;
+
+      for (let i = 0; i < numMid; i++) {
+        if (clusterIds[i] !== -1) continue;
+        clusterIds[i] = nextClusterId;
+
+        const featI = sectionFeaturesList[i + 1]!;
+
+        for (let j = i + 1; j < numMid; j++) {
+          if (clusterIds[j] !== -1) continue;
+
+          const featJ = sectionFeaturesList[j + 1]!;
+
+          const melSim = cosineSim(featI.avgMel, featJ.avgMel);
+          const chromaSim = cosineSim(featI.avgChroma, featJ.avgChroma);
+          const jointSim = 0.4 * melSim + 0.6 * chromaSim;
+
+          if (jointSim >= 0.82) {
+            clusterIds[j] = nextClusterId;
+          }
+        }
+        nextClusterId++;
+      }
+
+      // 2. Compute Cluster dynamic stats & scores
+      interface ClusterStats {
+        id: number;
+        avgRms: number;
+        avgHfc: number;
+        score: number;
+        label: 'Verse' | 'Chorus';
+      }
+
+      const clusters: ClusterStats[] = [];
+      for (let c = 0; c < nextClusterId; c++) {
+        let sumRms = 0;
+        let sumHfc = 0;
+        let count = 0;
+        for (let i = 0; i < numMid; i++) {
+          if (clusterIds[i] === c) {
+            const feat = sectionFeaturesList[i + 1]!;
+            sumRms += feat.avgRms;
+            sumHfc += feat.avgHfc;
+            count++;
+          }
+        }
+        clusters.push({
+          id: c,
+          avgRms: count > 0 ? sumRms / count : 0,
+          avgHfc: count > 0 ? sumHfc / count : 0,
+          score: 0,
+          label: 'Verse',
+        });
+      }
+
+      // Normalize scores
+      const maxRms = Math.max(...clusters.map((c) => c.avgRms));
+      const maxHfc = Math.max(...clusters.map((c) => c.avgHfc));
+
+      for (const c of clusters) {
+        const normRms = maxRms > 0 ? c.avgRms / maxRms : 0;
+        const normHfc = maxHfc > 0 ? c.avgHfc / maxHfc : 0;
+        c.score = 0.5 * normRms + 0.5 * normHfc;
+      }
+
+      // Sort clusters by score
+      const sortedClusters = [...clusters].sort((a, b) => a.score - b.score);
+
+      // Assign labels
+      if (sortedClusters.length === 1) {
+        sortedClusters[0]!.label = 'Verse';
+      } else if (sortedClusters.length === 2) {
+        sortedClusters[0]!.label = 'Verse';
+        sortedClusters[1]!.label = 'Chorus';
+      } else {
+        const verseScore = sortedClusters[0]!.score;
+        const chorusScore = sortedClusters[sortedClusters.length - 1]!.score;
+        const midRange = chorusScore - verseScore;
+
+        sortedClusters[0]!.label = 'Verse';
+        sortedClusters[sortedClusters.length - 1]!.label = 'Chorus';
+
+        for (let idx = 1; idx < sortedClusters.length - 1; idx++) {
+          const c = sortedClusters[idx]!;
+          const relScore = midRange > 0 ? (c.score - verseScore) / midRange : 0.5;
+          c.label = relScore >= 0.5 ? 'Chorus' : 'Verse';
+        }
+      }
+
+      // Map cluster labels back to middle sections
+      const middleLabels = sections.map((sec, idx) => {
         if (idx === 0) return 'Intro';
         if (idx === sections.length - 1) return 'Outro';
-        return rmsValues[idx]! >= threshold ? 'Chorus' : 'Verse';
+
+        const cId = clusterIds[idx - 1]!;
+        const cluster = clusters.find((cl) => cl.id === cId)!;
+        return cluster.label;
       });
 
-      // 2. Identify Bridge: 
-      // If a section is in the second half, labeled Verse, preceded by a Chorus, it is a Bridge.
-      const refinedLabels = [...tentativeLabels];
+      // 3. Identify Bridge:
+      // If a middle section is labeled 'Verse', is in the second half of the song,
+      // and is preceded by a Chorus, we label it as 'Bridge'.
+      const refinedLabels = [...middleLabels];
       for (let i = 1; i < sections.length - 1; i++) {
         if (
-          tentativeLabels[i] === 'Verse' &&
+          middleLabels[i] === 'Verse' &&
           i >= Math.floor(sections.length / 2) &&
           refinedLabels[i - 1] === 'Chorus'
         ) {
@@ -463,6 +657,37 @@ function sectionsFromBoundaries(
       // Apply the refined labels
       for (let i = 0; i < sections.length; i++) {
         sections[i]!.name = refinedLabels[i]!;
+      }
+    } else {
+      // Fallback simple volume labeling if features are missing or numMid is 0
+      const rmsValues = sectionFeaturesList.map((f) => f.avgRms);
+      const midRms = rmsValues.slice(1, -1);
+      const minRms = Math.min(...midRms);
+      const maxRms = Math.max(...midRms);
+      const range = maxRms - minRms;
+
+      if (range >= 0.005) {
+        const threshold = minRms + range * 0.5;
+        const tentativeLabels = sections.map((sec, idx) => {
+          if (idx === 0) return 'Intro';
+          if (idx === sections.length - 1) return 'Outro';
+          return rmsValues[idx]! >= threshold ? 'Chorus' : 'Verse';
+        });
+
+        const refinedLabels = [...tentativeLabels];
+        for (let i = 1; i < sections.length - 1; i++) {
+          if (
+            tentativeLabels[i] === 'Verse' &&
+            i >= Math.floor(sections.length / 2) &&
+            refinedLabels[i - 1] === 'Chorus'
+          ) {
+            refinedLabels[i] = 'Bridge';
+          }
+        }
+
+        for (let i = 0; i < sections.length; i++) {
+          sections[i]!.name = refinedLabels[i]!;
+        }
       }
     }
   }
@@ -504,13 +729,13 @@ export async function footeAnalyze(
 
   const bpm = detectBpm(decoded.monoSamples, decoded.sampleRate);
 
-  const frames = extractLogMelFrames(decoded.monoSamples, decoded.sampleRate);
+  const features = extractAllFeatures(decoded.monoSamples, decoded.sampleRate);
   const t2 = Date.now();
 
-  const ssm = buildSsm(frames);
+  const ssm = buildSsm(features.melFrames);
   const t3 = Date.now();
 
-  const novelty = convolveNovelty(ssm, frames.length);
+  const novelty = convolveNovelty(ssm, features.melFrames.length);
   const t4 = Date.now();
 
   const peaks = pickPeaks(novelty, decoded.sampleRate, bpm);
@@ -523,6 +748,9 @@ export async function footeAnalyze(
     bpm,
     decoded.monoSamples,
     decoded.sampleRate,
+    features.melFrames,
+    features.chromaFrames,
+    features.hfcFrames,
   );
 
   const med = median(novelty);
@@ -534,7 +762,7 @@ export async function footeAnalyze(
     sampleRate: decoded.sampleRate,
     suggestedSections,
     diagnostics: {
-      numFrames: frames.length,
+      numFrames: features.melFrames.length,
       numPeaks: peaks.length,
       noveltyMedian: med,
       noveltyMad: mad,

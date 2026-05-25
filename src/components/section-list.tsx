@@ -90,7 +90,7 @@ export function SectionList({ sections, onChange }: SectionListProps) {
             onDragEnd={handleDragEnd}
             className={cn('group flex items-center gap-3 rounded-lg border bg-surface-raised px-3 py-2.5 transition-colors', overIndex === index && dragIndex !== index ? 'border-accent/50 bg-accent/5' : 'border-surface-border', dragIndex === index && 'opacity-40')}
           >
-            <div className="flex cursor-grab items-center text-muted hover:text-[#F0EDE6] active:cursor-grabbing">
+            <div className="flex cursor-grab items-center text-muted hover:text-[#1d1d1f] active:cursor-grabbing">
               <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-label="Drag to reorder">
                 <path d="M7 2a2 2 0 10.001 4.001A2 2 0 007 2zm0 6a2 2 0 10.001 4.001A2 2 0 007 8zm0 6a2 2 0 10.001 4.001A2 2 0 007 14zm6-8a2 2 0 10-.001-4.001A2 2 0 0013 6zm0 2a2 2 0 10.001 4.001A2 2 0 0013 8zm0 6a2 2 0 10.001 4.001A2 2 0 0013 14z" />
               </svg>
