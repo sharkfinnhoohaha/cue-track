@@ -77,8 +77,8 @@ function decodeWav(bytes: Buffer): DecodedAudio {
   const audioFormat = Number(fmt.audioFormat);
 
   // 16-bit signed PCM Fast Path
-  if (audioFormat === 1 && bitsPerSample === 16 && wav.data && wav.data.samples) {
-    const rawSamples = wav.data.samples;
+  if (audioFormat === 1 && bitsPerSample === 16 && wav.data && (wav.data as any).samples) {
+    const rawSamples = (wav.data as any).samples;
     let buffer = rawSamples.buffer;
     let byteOffset = rawSamples.byteOffset;
     if (byteOffset % 2 !== 0) {
@@ -117,8 +117,8 @@ function decodeWav(bytes: Buffer): DecodedAudio {
   }
 
   // 32-bit float PCM Fast Path
-  if (audioFormat === 3 && bitsPerSample === 32 && wav.data && wav.data.samples) {
-    const rawSamples = wav.data.samples;
+  if (audioFormat === 3 && bitsPerSample === 32 && wav.data && (wav.data as any).samples) {
+    const rawSamples = (wav.data as any).samples;
     let buffer = rawSamples.buffer;
     let byteOffset = rawSamples.byteOffset;
     if (byteOffset % 4 !== 0) {
