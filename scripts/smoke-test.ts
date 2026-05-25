@@ -8,7 +8,7 @@ import path from 'path';
   const page = await context.newPage();
 
   try {
-    const targetUrl = 'https://cue-track-pvib3t5nw-overlook-strategy.vercel.app';
+    const targetUrl = 'https://cue-track-sigma.vercel.app';
     console.log(`Navigating to ${targetUrl}...`);
     await page.goto(targetUrl, { waitUntil: 'networkidle' });
 
