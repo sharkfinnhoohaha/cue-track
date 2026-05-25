@@ -60,8 +60,8 @@ function buildAuthConfig(): NextAuthConfig {
     try {
       // Deferred require so missing DATABASE_URL at import time does not crash.
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { db } = require('@/lib/db') as { db: Parameters<typeof DrizzleAdapter>[0] };
-      adapter = DrizzleAdapter(db);
+      const { getDb } = require('@/lib/db') as { getDb: () => Parameters<typeof DrizzleAdapter>[0] };
+      adapter = DrizzleAdapter(getDb());
     } catch (err) {
       console.warn('[auth] Could not initialize Drizzle adapter:', err);
     }
