@@ -240,7 +240,7 @@ function shouldOffloadToWorker(durationSeconds: number): boolean {
   if (!process.env.AUDIO_WORKER_URL) return false;
   const raw = process.env.AUDIO_WORKER_THRESHOLD_SECONDS;
   const threshold = raw ? Number(raw) : 240;
-  if (!Number.isFinite(threshold) || threshold <= 0) return false;
+  if (!Number.isFinite(threshold) || threshold < 0) return false;
   return durationSeconds >= threshold;
 }
 
