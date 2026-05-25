@@ -294,7 +294,10 @@ export function TrackForm({
     // pitch ("sign up free, then generate as many as you want") is the entire
     // point of restricting manual mode. They can still close the modal to
     // abandon, but cannot proceed without an account.
-    if (!isAuthenticated) {
+    //
+    // The upload-analysis flow remains anon-friendly (per the API design), so
+    // we bypass this gate if finalizing an existing track draft.
+    if (!isAuthenticated && !existingTrackId) {
       setShowSignupPrompt(true);
       return;
     }
