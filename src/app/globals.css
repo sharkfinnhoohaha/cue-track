@@ -163,6 +163,13 @@
     @apply font-mono text-sm tabular-nums;
   }
 
+  /* Loading-placeholder fill. Used by the dashboard and track-detail loading
+     states (the parent carries `animate-pulse`). Was previously undefined, so
+     the skeleton bars rendered as invisible zero-background boxes. */
+  .skeleton {
+    @apply bg-black/[.08] rounded;
+  }
+
   .scrollbar-hidden {
     -ms-overflow-style: none;
     scrollbar-width: none;

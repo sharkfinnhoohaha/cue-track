@@ -23,6 +23,7 @@ import Google from 'next-auth/providers/google';
 import type { JWT } from 'next-auth/jwt';
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
 import type { SubscriptionStatus } from '@/types';
+import { getDb, users, accounts, sessions, verificationTokens } from '@/lib/db';
 
 // Reference JWT so TS keeps the module-augmentation site below valid under
 // moduleResolution=bundler. Without an import, the declare-module block
@@ -59,10 +60,32 @@ function buildAuthConfig(): NextAuthConfig {
 
   if (process.env.DATABASE_URL) {
     try {
-      // Deferred require so missing DATABASE_URL at import time does not crash.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { getDb } = require('@/lib/db') as { getDb: () => Parameters<typeof DrizzleAdapter>[0] };
-      adapter = DrizzleAdapter(getDb());
+      // `@/lib/db` is import-safe: getDb() is lazy and only throws if called
+      // without DATABASE_URL, which we guard above. So a static import here
+      // does not read env at module load and stays build-safe on Vercel.
+      //
+      // The adapter MUST receive our table mapping. Called with only the db,
+      // it falls back to its built-in default schema, whose singular table
+      // names (`user`, `account`, `session`, `verificationToken`) do not
+      // exist in this database — our tables are plural (`users`, `accounts`,
+      // …). That fallback made every OAuth callback throw on
+      // `getUserByAccount`/`createUser`, surfacing as the Auth.js
+      // "Configuration" error right after Google sign-in.
+      //
+      // The cast is required because @auth/drizzle-adapter types its schema
+      // arg to its own default column shape (it expects `emailVerified`/
+      // `image` on users and snake_case token columns on accounts). Our
+      // tables diverge, but every column the adapter actually reads/writes
+      // for the JWT-session + Google/email flows (id, email, name, provider,
+      // providerAccountId, userId, sessionToken, identifier, token, expires)
+      // exists; extra/renamed columns are ignored by Drizzle's `.values()`.
+      adapter = DrizzleAdapter(getDb(), {
+        usersTable: users,
+        accountsTable: accounts,
+        sessionsTable: sessions,
+        verificationTokensTable: verificationTokens,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
     } catch (err) {
       console.warn('[auth] Could not initialize Drizzle adapter:', err);
     }
@@ -111,6 +134,12 @@ function buildAuthConfig(): NextAuthConfig {
 
   return {
     ...(adapter ? { adapter } : {}),
+    // Vercel serves this app behind its edge proxy and via generated
+    // *.vercel.app aliases, so the request host is not the canonical origin.
+    // Trust it explicitly rather than relying on Auth.js's `VERCEL` env
+    // auto-detection, which otherwise throws `UntrustedHost` (a
+    // "Configuration" error) on the OAuth callback.
+    trustHost: true,
     session: { strategy: 'jwt' },
     providers,
     pages: {
@@ -158,7 +187,11 @@ function buildAuthConfig(): NextAuthConfig {
         return session;
       },
     },
-    secret: process.env.NEXTAUTH_SECRET,
+    // Accept either env name. Auth.js v5 standardized on AUTH_SECRET; this
+    // project's docs/.env use NEXTAUTH_SECRET. Reading both means a missing
+    // (or differently-named) value can't silently degrade to no secret and
+    // produce the "Configuration" error on sign-in.
+    secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   };
 }
 

@@ -189,8 +189,8 @@ export default function PricingPage() {
               )}
             >
               {plan.highlighted && (
-                <div className="absolute -top-3 left-6">
-                  <span className="badge-accent font-mono text-xs uppercase px-3 py-1">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                  <span className="inline-flex items-center whitespace-nowrap rounded-full bg-accent px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-white shadow-sm">
                     Most Popular
                   </span>
                 </div>

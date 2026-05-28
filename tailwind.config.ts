@@ -33,6 +33,11 @@ const config: Config = {
       fontFamily: {
         sans: ['var(--font-inter)', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         mono: ['var(--font-jetbrains)', 'JetBrains Mono', 'Menlo', 'monospace'],
+        // Heading alias. `font-display` is used across the app (auth, pricing,
+        // dashboard, articles); without this key it was a dead class and
+        // headings fell back to the inherited sans stack. Mapped to the same
+        // Inter stack so the intent is explicit with no visual change.
+        display: ['var(--font-inter)', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         // legacy alias — components that reference font-body will use Inter
         body: ['var(--font-inter)', 'Inter', '-apple-system', 'sans-serif'],
       },
