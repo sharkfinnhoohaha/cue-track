@@ -70,13 +70,50 @@ export async function GET(
 
     const track = rows[0];
 
+    // Check if the caller has paid or has Pro access to download the full track.
+    // If not, fullUrl is returned as null so the frontend displays the checkout flow instead of the direct download button.
+    let hasAccess = false;
+    try {
+      const { purchases, users } = await import('@/lib/db');
+      const { and } = await import('drizzle-orm');
+
+      // Check 1: paid purchase exists for this track
+      const paidPurchase = await db
+        .select({ id: purchases.id })
+        .from(purchases)
+        .where(
+          and(
+            eq(purchases.trackId, id),
+            eq(purchases.status, 'paid'),
+          ),
+        )
+        .limit(1);
+
+      if (paidPurchase.length > 0) {
+        hasAccess = true;
+      } else if (track.userId) {
+        // Check 2: track owner is an active Pro subscriber
+        const userRows = await db
+          .select({ subscriptionStatus: users.subscriptionStatus })
+          .from(users)
+          .where(eq(users.id, track.userId))
+          .limit(1);
+
+        if (userRows.length > 0 && userRows[0].subscriptionStatus === 'active') {
+          hasAccess = true;
+        }
+      }
+    } catch (err) {
+      console.error('[tracks/[id]] Payment/access check failed:', err);
+    }
+
     const record: TrackRecord = {
       id: track.id,
       title: track.title,
       spec: track.spec,
       status: track.status,
       previewUrl: track.previewUrl,
-      fullUrl: track.fullUrl,
+      fullUrl: hasAccess ? track.fullUrl : null,
       duration: track.duration,
       createdAt: track.createdAt.toISOString(),
       email: track.email,

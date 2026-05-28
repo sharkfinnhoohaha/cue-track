@@ -80,6 +80,23 @@ export function encodeMp3(
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   let lamejs: typeof import('lamejs');
   try {
+    // Fix global scope references required by lamejs in modular environments (Node, Webpack, etc.)
+    if (typeof global !== 'undefined') {
+      if (!(global as any).MPEGMode) {
+        (global as any).Lame = require('lamejs/src/js/Lame.js');
+        (global as any).Presets = require('lamejs/src/js/Presets.js');
+        (global as any).GainAnalysis = require('lamejs/src/js/GainAnalysis.js');
+        (global as any).QuantizePVT = require('lamejs/src/js/QuantizePVT.js');
+        (global as any).Quantize = require('lamejs/src/js/Quantize.js');
+        (global as any).Takehiro = require('lamejs/src/js/Takehiro.js');
+        (global as any).Reservoir = require('lamejs/src/js/Reservoir.js');
+        (global as any).MPEGMode = require('lamejs/src/js/MPEGMode.js');
+        (global as any).BitStream = require('lamejs/src/js/BitStream.js');
+        (global as any).Encoder = require('lamejs/src/js/Encoder.js');
+        (global as any).Version = require('lamejs/src/js/Version.js');
+        (global as any).VBRTag = require('lamejs/src/js/VBRTag.js');
+      }
+    }
     lamejs = require('lamejs');
   } catch {
     throw new Error(

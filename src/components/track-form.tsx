@@ -290,13 +290,9 @@ export function TrackForm({
     }
 
     // Manual mode is signup-gated per the V1 funnel. Anonymous users see the
-    // modal on every submit; there is no skip path because the conversion
-    // pitch ("sign up free, then generate as many as you want") is the entire
-    // point of restricting manual mode. They can still close the modal to
-    // abandon, but cannot proceed without an account.
-    //
-    // The upload-analysis flow remains anon-friendly (per the API design), so
-    // we bypass this gate if finalizing an existing track draft.
+    // modal on manual submits (no existingTrackId); if they have an
+    // existingTrackId, they are finalizing an upload draft, which is
+    // allowed anonymously.
     if (!isAuthenticated && !existingTrackId) {
       setShowSignupPrompt(true);
       return;
