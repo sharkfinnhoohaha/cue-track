@@ -22,7 +22,7 @@ Cue Track turns an uploaded song into an in-ear-monitor click track with voiced 
 ## Hard infra constraints (these bit us, read first)
 
 - **Vercel serverless body cap is 4.5 MB at the edge.** It 413s *before* the route handler runs, so per-route size caps are unreachable for the request body. Any user-uploaded audio must go through Vercel Blob, not multipart to a Next.js route.
-- **Vercel function `maxDuration` is 60s** for `/api/tracks/generate` and `/api/tracks/analyze`. The ML worker's cold start (~30-60s) is why analyze is async (enqueue + poll), not synchronous.
+- **Vercel function `maxDuration`**: `/api/tracks/analyze` is 300s; `/api/tracks/generate` is 60s. Analyze is async (enqueue + poll) so the 202 returns fast, but the `waitUntil(runAnalyzeJob)` background work is still bounded by this route's `maxDuration`, not exempt from it. It was 60s, which killed real-song analysis (worker cold start + round trip, or in-process decode of a multi-minute song) mid-run and stranded the job in `running`; raised to 300s. The internal `WORKER_TIMEOUT_MS` (90s) + in-process fallback now both fit inside the budget. Keep the client poll ceiling (`upload-form.tsx`) and the poll route's stale-job threshold above this value.
 - **`@vercel/blob` requires Node ≥20.** `package.json` declares `engines.node >=20`; the Vercel dashboard must match.
 - **Cloud Run audio worker has a 32 MB request body cap** and a default 60s request timeout. The Vercel-side `WORKER_TIMEOUT_MS` is 90s to cover the ML cold-start case.
 
@@ -55,7 +55,7 @@ Files:
 
 Why three hops instead of one:
 - **Blob upload first** because Vercel's 4.5 MB body cap kills direct multipart uploads.
-- **Async job** because ML cold start can exceed Vercel's 60s function timeout.
+- **Async job** so the POST returns a 202 immediately instead of holding the request open for the whole analysis. Note the background runner is still bounded by the route's `maxDuration` (300s); the poll route fails a job that outlives that budget so a killed runner can't strand the client.
 - **Quota + rate-limit on `/analyze` (not `/analyze/upload`)** so an unused upload token doesn't burn the user's free analysis. The blob still gets cleaned up by `runAnalyzeJob`'s `finally`.
 
 Idempotency: the runner uses a conditional UPDATE (`WHERE status='queued'`) to claim the job, so a duplicate dispatch on function restart sees `status != 'queued'` and exits without double-processing.

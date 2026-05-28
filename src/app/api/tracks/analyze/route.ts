@@ -10,7 +10,13 @@ import { runAnalyzeJob } from '@/lib/analyze-jobs';
 import { pickMethod, workerForMethod } from '@/lib/analyze-router';
 import { canonicalizeAudioMime, inferMimeFromName } from '@/lib/audio/mime';
 
-export const maxDuration = 60;
+// waitUntil(runAnalyzeJob) runs the analysis after the 202 response, but its
+// wall clock is still bounded by this function's maxDuration. A full song's
+// in-process decode + Foote detection, or a Cloud Run worker round trip
+// including cold start, routinely exceeds 60s, which killed the background job
+// mid-run and stranded the row in 'running' until the client poll gave up.
+// 300s is the platform maximum and is matched by the client poll ceiling.
+export const maxDuration = 300;
 export const runtime = 'nodejs';
 
 // ---------------------------------------------------------------------------

@@ -8,9 +8,10 @@ import { NextRequest } from 'next/server';
  * leakage).
  */
 
-const { mockAuth, mockSelect } = vi.hoisted(() => ({
+const { mockAuth, mockSelect, mockUpdateReturning } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockSelect: vi.fn(),
+  mockUpdateReturning: vi.fn(),
 }));
 
 vi.mock('@/auth', () => ({ auth: mockAuth }));
@@ -21,6 +22,13 @@ vi.mock('@/lib/db', () => ({
       from: () => ({
         where: () => ({
           limit: () => mockSelect(),
+        }),
+      }),
+    }),
+    update: () => ({
+      set: () => ({
+        where: () => ({
+          returning: () => mockUpdateReturning(),
         }),
       }),
     }),
@@ -53,7 +61,9 @@ const ROW = {
   status: 'queued',
   result: null,
   errorText: null,
-  createdAt: new Date('2026-05-17T10:00:00Z'),
+  // Recent so the in-flight cases are not treated as stale. The stale-job
+  // path is exercised explicitly with an old timestamp below.
+  createdAt: new Date(),
   startedAt: null,
   finishedAt: null,
 };
@@ -63,6 +73,8 @@ describe('GET /api/tracks/analyze/jobs/[id]', () => {
     vi.resetAllMocks();
     process.env.RATE_LIMIT_IP_SALT = 'salt';
     mockAuth.mockResolvedValue(null);
+    // Default: a stale-job flip claims the row. Overridden where it matters.
+    mockUpdateReturning.mockResolvedValue([{ id: 'job-xyz' }]);
   });
 
   it('returns 404 when no row exists', async () => {
@@ -134,6 +146,27 @@ describe('GET /api/tracks/analyze/jobs/[id]', () => {
     const body = await res.json();
     expect(body.status).toBe('failed');
     expect(body.error).toBe('Worker exploded');
+  });
+
+  it('fails a stale running job and reports it instead of staying running', async () => {
+    const stale = new Date(Date.now() - 600_000); // 10 min ago, past the budget
+    mockSelect.mockImplementationOnce(async () => {
+      const ipHash = (await import('@/lib/rate-limit')).getClientIpHash(makeRequest());
+      return [
+        {
+          ...ROW,
+          identifier: `ip:${ipHash}`,
+          status: 'running',
+          startedAt: stale,
+          createdAt: stale,
+        },
+      ];
+    });
+    const res = await GET(makeRequest(), { params: { id: 'job-xyz' } });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe('failed');
+    expect(body.error).toMatch(/processing limit/i);
   });
 
   it('returns 400 when no identifier can be determined', async () => {

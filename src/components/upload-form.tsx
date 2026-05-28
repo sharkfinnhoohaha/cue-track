@@ -34,8 +34,12 @@ const ACCEPTED_EXT_RE = /\.(mp3|wav|m4a|mp4|aac|ogg|oga|flac)$/i;
 // 150 MB covers ~12 min of stereo 44.1 kHz/16-bit WAV, including transcoded
 // M4A uploads (browser-decoded WAV is ~10x the original M4A size).
 const MAX_FILE_BYTES = 150 * 1024 * 1024;
-const POLL_INTERVAL_MS = 1500;
-const POLL_MAX_ATTEMPTS = 90;
+// The poll ceiling must outlast the server budget: the analyze function can
+// run up to its 300s maxDuration, and the status route fails a stranded job at
+// ~330s. 2000ms x 180 = 360s leaves room for a poll to observe that verdict
+// instead of the client giving up first with a misleading message.
+const POLL_INTERVAL_MS = 2000;
+const POLL_MAX_ATTEMPTS = 180;
 
 interface PaywallState {
   used: number;
@@ -75,7 +79,9 @@ async function pollAnalyzeJob(statusUrl: string): Promise<PolledJob> {
     const body = (await res.json()) as PolledJob;
     if (body.status === 'done' || body.status === 'failed') return body;
   }
-  throw new Error('Analyze timed out. Try again or pick a smaller file.');
+  throw new Error(
+    'Analysis is taking longer than expected. Try again, or use a shorter clip.',
+  );
 }
 
 export function UploadForm() {
@@ -412,8 +418,8 @@ export function UploadForm() {
                   Analyzing your track...
                 </div>
                 <p className="text-[12px] text-[#6e6e73] max-w-[360px]">
-                  This takes 5 to 60 seconds depending on the song length and
-                  which detector you get.
+                  Most songs take 10 to 90 seconds. Longer tracks can take a
+                  couple of minutes, so keep this tab open.
                 </p>
               </div>
             ) : (

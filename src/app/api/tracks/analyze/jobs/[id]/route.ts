@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { getClientIpHash } from '@/lib/rate-limit';
 
@@ -89,6 +89,35 @@ export async function GET(
   if (job.identifier !== callerIdentifier) {
     // 404 instead of 403 to avoid leaking job existence across callers.
     return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+  }
+
+  // Stale-job recovery: a job whose owning function was killed mid-run (e.g.
+  // the analysis exceeded the route's maxDuration) is stranded in queued or
+  // running with no live worker to ever finish it. Once it is older than the
+  // function budget plus scheduling slack, no runner can still hold it, so fail
+  // it cleanly here rather than letting the client poll until its own ceiling.
+  // 330s = the analyze route's 300s maxDuration + slack.
+  const ANALYZE_JOB_STALE_MS = 330_000;
+  if (job.status === 'queued' || job.status === 'running') {
+    const since = (job.startedAt ?? job.createdAt).getTime();
+    if (Date.now() - since > ANALYZE_JOB_STALE_MS) {
+      const errorText =
+        'Analysis ran past the processing limit. Try again, or use a shorter clip.';
+      const flipped = await db
+        .update(analyzeJobs)
+        .set({ status: 'failed', errorText, finishedAt: new Date() })
+        .where(
+          and(
+            eq(analyzeJobs.id, id),
+            inArray(analyzeJobs.status, ['queued', 'running']),
+          ),
+        )
+        .returning({ id: analyzeJobs.id });
+      if (flipped.length > 0) {
+        job.status = 'failed';
+        job.errorText = errorText;
+      }
+    }
   }
 
   const body: JobStatusBody = {
