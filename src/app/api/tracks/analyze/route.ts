@@ -193,12 +193,14 @@ export async function POST(request: NextRequest) {
   }
 
   // --- Upload quota gate (Phase C) -------------------------------------
+  // The V1 funnel is "1 free analysis, then pay": the paywall is ENFORCED by
+  // default. Set ENABLE_ANALYZE_PAYWALL=false to disable it (e.g. a growth
+  // period). The quota itself fails open on any DB error (see upload-quota.ts),
+  // so a missing upload_analyses table can't lock users out of uploading.
   const tier = await resolveUploadTier(userId);
   const quota = await checkUploadQuota(quotaIdentifiers, tier);
-  if (
-    process.env.ENABLE_ANALYZE_PAYWALL === 'true' &&
-    !quota.allowed
-  ) {
+  const paywallEnabled = process.env.ENABLE_ANALYZE_PAYWALL !== 'false';
+  if (paywallEnabled && !quota.allowed) {
     return NextResponse.json(
       {
         error: 'Upload quota exceeded',

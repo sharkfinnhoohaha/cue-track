@@ -289,46 +289,36 @@ export function UploadForm() {
             You&apos;ve used your free analysis
           </p>
           <h3 className="font-sans font-black tracking-[-0.03em] text-[#1d1d1f] mb-3 text-[clamp(22px,3vw,30px)]">
-            Want unlimited uploads? Go Pro.
+            Go Pro for unlimited analyses
           </h3>
-          <p className="text-[14px] text-[#6e6e73] max-w-[440px] mx-auto mb-7 leading-[1.55]">
-            You&apos;ve analyzed {paywall.used} of {paywall.limit} free uploads.
-            Pro unlocks unlimited analyses + Studio voices. Single-track
-            downloads ($3) only unlock tracks you&apos;ve already created.
+          <p className="text-[14px] text-[#6e6e73] max-w-[460px] mx-auto mb-7 leading-[1.55]">
+            Your first track analysis is on us. To analyze more songs, subscribe
+            to Pro — unlimited uploads &amp; analyses, plus Studio voices.
+            Finished a track already? You can still download it for $3.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-[480px] mx-auto">
+          <div className="flex flex-col items-center gap-4">
             <Link
               href="/pricing"
-              className="flex flex-col items-center justify-center rounded-xl border border-black/[.13] bg-white px-5 py-5 text-[#1d1d1f] hover:opacity-80 transition-opacity"
+              className="inline-flex items-center justify-center rounded-full bg-[#1d1d1f] px-7 py-3 text-[15px] font-semibold text-white hover:opacity-85 transition-opacity glow-accent"
             >
-              <span className="font-mono text-[10px] tracking-[.12em] uppercase text-[#b0b0b5] mb-1.5">
-                Per track
-              </span>
-              <span className="font-mono text-[26px] font-semibold tracking-[-0.03em] leading-none mb-1">
-                $3
-              </span>
-              <span className="text-[12px] text-[#6e6e73]">one-time</span>
+              Go Pro — $19/mo
             </Link>
-            <Link
-              href="/pricing"
-              className="flex flex-col items-center justify-center rounded-xl bg-[#1d1d1f] px-5 py-5 text-white hover:opacity-85 transition-opacity"
-            >
-              <span className="font-mono text-[10px] tracking-[.12em] uppercase text-white/40 mb-1.5">
-                Pro
-              </span>
-              <span className="font-mono text-[26px] font-semibold tracking-[-0.03em] leading-none mb-1">
-                $19
-              </span>
-              <span className="text-[12px] text-white/60">per month · unlimited</span>
-            </Link>
+            <div className="flex items-center gap-5 text-[12px]">
+              <Link
+                href="/auth/signin?callbackUrl=/create"
+                className="text-[#0066cc] hover:opacity-75 transition-opacity"
+              >
+                Already Pro? Sign in
+              </Link>
+              <button
+                type="button"
+                onClick={reset}
+                className="text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+              >
+                Pick a different file
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={reset}
-            className="mt-6 text-[12px] text-[#6e6e73] hover:text-[#1d1d1f] underline underline-offset-4"
-          >
-            Pick a different file
-          </button>
         </div>
       </div>
     );
