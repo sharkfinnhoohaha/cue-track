@@ -193,14 +193,23 @@ describe('POST /api/tracks/analyze (async, blob-uploaded)', () => {
     expect(mockWaitUntil).not.toHaveBeenCalled();
   });
 
-  it('returns 402 when paywall is enabled and quota is exhausted', async () => {
-    process.env.ENABLE_ANALYZE_PAYWALL = 'true';
+  it('returns 402 by default when quota is exhausted (paywall on by default)', async () => {
+    // beforeEach deletes ENABLE_ANALYZE_PAYWALL, so this asserts the default
+    // "1 free analysis, then pay" behavior with no flag set.
     mockCheckUploadQuota.mockResolvedValue({ allowed: false, used: 1, limit: 1 });
     const res = await POST(makeRequest());
     expect(res.status).toBe(402);
     const body = await res.json();
     expect(body.code).toBe('UPLOAD_QUOTA_EXCEEDED');
     expect(mockWaitUntil).not.toHaveBeenCalled();
+  });
+
+  it('does not enforce the paywall when ENABLE_ANALYZE_PAYWALL=false', async () => {
+    process.env.ENABLE_ANALYZE_PAYWALL = 'false';
+    mockCheckUploadQuota.mockResolvedValue({ allowed: false, used: 1, limit: 1 });
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(202);
+    expect(mockWaitUntil).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to in-process analysis when worker env vars are missing', async () => {

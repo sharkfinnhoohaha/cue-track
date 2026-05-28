@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import type { TrackRecord } from '@/types';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
@@ -215,6 +215,7 @@ function AudioPlayer({ src }: { src: string }) {
 export default function TrackDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const trackId = params.id as string;
   const isCheckoutSuccess = searchParams?.get('checkout') === 'success';
   const [track, setTrack] = useState<TrackRecord | null>(null);
@@ -250,6 +251,15 @@ export default function TrackDetailPage() {
       cancelled = true;
     };
   }, [fetchTrack]);
+
+  // A 'rendering' track is an un-finalized draft from the analyze pipeline.
+  // The review screen is where it gets finalized — send the user there instead
+  // of stranding them on a spinner that never resolves on this page.
+  useEffect(() => {
+    if (track && track.status === 'rendering') {
+      router.replace(`/tracks/${trackId}/review`);
+    }
+  }, [track, trackId, router]);
 
   const handleDownload = useCallback(async () => {
     setDownloading(true);
@@ -368,11 +378,28 @@ export default function TrackDetailPage() {
     );
   }
 
+  // Un-finalized draft: the redirect effect above is taking the user to the
+  // review screen. Render a minimal hand-off state rather than the full
+  // (preview-less) draft page while navigation settles.
+  if (track.status === 'rendering') {
+    return (
+      <>
+        <Nav />
+        <main className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
+          <div className="flex flex-col items-center py-20 text-center">
+            <div className="mb-4 h-10 w-10 animate-spin rounded-full border-2 border-surface-border border-t-accent" />
+            <p className="text-sm text-[#1d1d1f] font-medium">Taking you to the review screen…</p>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
   const totalBars = track.spec.sections.reduce((sum, s) => sum + s.bars, 0);
   const tsLabel = `${track.spec.timeSignature.beats}/${track.spec.timeSignature.subdivision}`;
   const createdDate = new Date(track.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const isPaid = track.hasAccess === true;
-  const isRendering = track.status === 'rendering';
 
   return (
     <>
@@ -380,9 +407,8 @@ export default function TrackDetailPage() {
       <main className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
-            <span className={cn('badge', track.status === 'ready' && 'badge-green', track.status === 'rendering' && 'badge-accent', track.status === 'failed' && 'badge-red')}>
+            <span className={cn('badge', track.status === 'ready' && 'badge-green', track.status === 'failed' && 'badge-red')}>
               {track.status === 'ready' && 'Ready'}
-              {track.status === 'rendering' && 'Rendering...'}
               {track.status === 'failed' && 'Failed'}
             </span>
             <span className="badge badge-muted font-mono uppercase">{track.spec.format}</span>
@@ -393,16 +419,6 @@ export default function TrackDetailPage() {
 
         {track.previewUrl && track.status === 'ready' && (
           <Card className="mb-8"><AudioPlayer src={track.previewUrl} /></Card>
-        )}
-
-        {isRendering && (
-          <Card className="mb-8">
-            <div className="flex flex-col items-center py-8 text-center">
-              <div className="mb-4 h-10 w-10 animate-spin rounded-full border-2 border-surface-border border-t-accent" />
-              <p className="text-sm text-[#1d1d1f] font-medium">Generating your track...</p>
-              <p className="text-xs text-muted mt-1">This usually takes a few seconds.</p>
-            </div>
-          </Card>
         )}
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">

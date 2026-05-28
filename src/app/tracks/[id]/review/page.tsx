@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
 import { TrackForm } from '@/components/track-form';
+import { StepIndicator } from '@/components/step-indicator';
 import { auth } from '@/auth';
 import type { SongSpec } from '@/types';
 
@@ -74,6 +75,9 @@ export default async function ReviewPage({ params }: ReviewPageProps) {
       <Nav />
       <div className="border-b border-black/[.08]">
         <section className="max-w-3xl mx-auto px-6 pt-20 pb-10 text-center">
+          <div className="mb-8">
+            <StepIndicator current={2} />
+          </div>
           <p className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-4">
             Review &amp; finalize
           </p>

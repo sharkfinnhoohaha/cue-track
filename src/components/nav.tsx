@@ -15,11 +15,29 @@ export function Nav() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // null = unknown (initial). Avoids flashing the wrong auth state: the
+  // "Sign in" link only renders once we've confirmed there's no session.
+  const [authed, setAuthed] = useState<boolean | null>(null);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 16);
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/auth/session', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((session) => {
+        if (!cancelled) setAuthed(Boolean(session && session.user));
+      })
+      .catch(() => {
+        if (!cancelled) setAuthed(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -59,12 +77,22 @@ export function Nav() {
           ))}
         </ul>
 
-        <Link
-          href="/create"
-          className="hidden md:inline-flex text-[13px] font-medium text-[#0066cc] hover:opacity-75 transition-opacity"
-        >
-          Create a track →
-        </Link>
+        <div className="hidden md:flex items-center gap-5">
+          {authed === false && (
+            <Link
+              href="/auth/signin"
+              className="text-[13px] text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+            >
+              Sign in
+            </Link>
+          )}
+          <Link
+            href="/create"
+            className="text-[13px] font-medium text-[#0066cc] hover:opacity-75 transition-opacity"
+          >
+            Create a track →
+          </Link>
+        </div>
 
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
@@ -95,6 +123,14 @@ export function Nav() {
               {link.label}
             </Link>
           ))}
+          {authed === false && (
+            <Link
+              href="/auth/signin"
+              className="py-2 text-[14px] text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+            >
+              Sign in
+            </Link>
+          )}
           <Link
             href="/create"
             className="mt-2 inline-flex text-[14px] font-medium text-[#0066cc]"

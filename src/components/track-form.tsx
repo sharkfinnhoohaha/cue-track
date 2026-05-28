@@ -306,7 +306,7 @@ export function TrackForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
       {error && (
-        <div className="rounded-lg border border-red-900/50 bg-red-900/20 px-4 py-3 text-sm text-red-400 animate-fade-in">{error}</div>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 animate-fade-in">{error}</div>
       )}
 
       <Card header="Track Details">
@@ -346,7 +346,7 @@ export function TrackForm({
           <div>
             <Select label="Voice" value={spec.voiceId} onChange={(e) => update('voiceId', e.target.value)} options={VOICE_OPTIONS} />
             {getVoiceTier(spec.voiceId) === 'studio' && !isAuthenticated && (
-              <p className="mt-1.5 text-xs text-yellow-400 font-mono">
+              <p className="mt-1.5 text-xs text-amber-600 font-mono">
                 Studio voices require a Pro subscription. Sign up to use, or pick a Standard voice.
               </p>
             )}
@@ -355,7 +355,7 @@ export function TrackForm({
             <label className="label font-mono text-xs uppercase tracking-wider">Click Sound</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {CLICK_SOUNDS.map((sound) => (
-                <button key={sound.id} type="button" onClick={() => update('clickSound', sound.id)} className={cn('rounded-lg border px-3 py-2.5 text-left transition-all', spec.clickSound === sound.id ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border bg-surface hover:border-[#2a2a2a] text-muted hover:text-[#1d1d1f]')}>
+                <button key={sound.id} type="button" onClick={() => update('clickSound', sound.id)} className={cn('rounded-lg border px-3 py-2.5 text-left transition-all', spec.clickSound === sound.id ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border bg-surface hover:border-black/30 text-muted hover:text-[#1d1d1f]')}>
                   <span className="block text-sm font-medium">{sound.label}</span>
                   <span className="block text-xs text-muted mt-0.5">{sound.desc}</span>
                 </button>
@@ -404,18 +404,18 @@ export function TrackForm({
         {spec.sections.length > 0 && (
           <p className={cn(
             'text-xs font-mono',
-            isOverDurationLimit ? 'text-red-400' : isNearDurationLimit ? 'text-yellow-400' : 'text-muted',
+            isOverDurationLimit ? 'text-red-600' : isNearDurationLimit ? 'text-amber-600' : 'text-muted',
           )}>
             {spec.sections.reduce((sum, s) => sum + s.bars, 0)} bars across {spec.sections.length} section{spec.sections.length !== 1 ? 's' : ''} (≈ {formatDuration(estimatedDurationSec)})
           </p>
         )}
         {spec.sections.length > 0 && isOverDurationLimit && (
-          <p className="text-xs text-red-400 font-mono text-center">
+          <p className="text-xs text-red-600 font-mono text-center">
             Exceeds {formatDuration(MAX_DURATION_SECONDS)} maximum. Reduce bars or sections to generate.
           </p>
         )}
         {spec.sections.length > 0 && isNearDurationLimit && (
-          <p className="text-xs text-yellow-400 font-mono text-center">
+          <p className="text-xs text-amber-600 font-mono text-center">
             Approaching {formatDuration(MAX_DURATION_SECONDS)} maximum.
           </p>
         )}
@@ -437,7 +437,11 @@ export function TrackForm({
             } catch {
               // ignore
             }
-            window.location.href = '/auth/signin?callbackUrl=/create';
+            // Return to manual mode (not the upload-first default) so the
+            // restored spec lands on the form the user was filling out.
+            window.location.href =
+              '/auth/signin?callbackUrl=' +
+              encodeURIComponent('/create?mode=manual');
           }}
           onClose={() => setShowSignupPrompt(false)}
         />

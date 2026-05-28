@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
-import { signIn } from '@/auth';
+import { signIn, auth } from '@/auth';
 
 export const metadata: Metadata = {
   title: 'Sign in',
@@ -17,12 +18,20 @@ function safeCallback(raw: string | string[] | undefined): string {
   return value;
 }
 
-export default function SignInPage({
+export default async function SignInPage({
   searchParams,
 }: {
   searchParams: { callbackUrl?: string | string[] };
 }) {
   const callbackUrl = safeCallback(searchParams.callbackUrl);
+
+  // Already signed in? Don't show the form — send them where they were headed
+  // (e.g. /create, /pricing, /dashboard). Keeps the new nav "Sign in" link and
+  // the manual-mode sign-up round-trip from dead-ending on a pointless form.
+  const session = await auth();
+  if (session?.user?.id) {
+    redirect(callbackUrl);
+  }
   const googleEnabled = Boolean(
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
   );

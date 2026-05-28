@@ -6,10 +6,10 @@
  * identifier(s); if the count meets the free cap and the caller is not on
  * a paid plan, the route returns 402.
  *
- * The gate is dormant in production until ENABLE_ANALYZE_PAYWALL=true is
- * set on Vercel; the route still calls into this helper unconditionally
- * (so the recording side stays accurate for analytics) and the route
- * decides whether to enforce based on the flag.
+ * The gate is ENFORCED by default ("1 free analysis, then pay"); set
+ * ENABLE_ANALYZE_PAYWALL=false on Vercel to disable it. The route always
+ * calls into this helper (so the recording side stays accurate for
+ * analytics) and decides whether to enforce based on that flag.
  *
  * Fail-open semantics mirror src/lib/rate-limit.ts: any DB error (including
  * the upload_analyses table not yet existing) returns allowed: true and
@@ -49,7 +49,11 @@ export async function resolveUploadTier(
       .where(eq(users.id, userId))
       .limit(1);
     const status = rows[0]?.subscriptionStatus;
-    return status === 'active' || status === 'past_due' ? 'paid' : 'free';
+    // Only an active subscription unlocks the paid (unlimited) upload tier.
+    // This matches checkTrackAccess (downloads) and the dashboard's isPro,
+    // which both treat only 'active' as Pro — a past_due grace period does
+    // not silently keep unlimited analyses flowing.
+    return status === 'active' ? 'paid' : 'free';
   } catch (err) {
     console.error('[upload-quota] subscription lookup failed:', err);
     // Conservative: a DB hiccup should not silently unlock the paid tier.

@@ -2,8 +2,6 @@ import Link from 'next/link';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
 import { UploadForm } from '@/components/upload-form';
-import { TrackForm } from '@/components/track-form';
-import { auth } from '@/auth';
 
 const STEPS = [
   {
@@ -35,21 +33,13 @@ const FEATURES = [
 /**
  * Landing page — primary entry point.
  *
- * Two flows visible on one page:
- * - Upload (top): the headline product. Drop your audio, get a cue track
- *   curated to it. Currently a "coming soon" UI; backend analysis lands in
- *   V1.5.
- * - Manual mode (below): the power-user lane. Fill in BPM + sections.
- *   Requires a signed-in account; the TrackForm component handles the
- *   submit-time gate and signup modal.
- *
- * Server component so we can detect the user's auth state via auth() and
- * pass it down to TrackForm.
+ * Upload-first: the hero leads with the headline product (drop your audio,
+ * get a cue track curated to it) via the live UploadForm. The full guided
+ * create flow lives on /create. Manual mode (enter BPM + sections by hand)
+ * is a demoted, secondary path linked from the "build manually" section
+ * below — it no longer renders the full form inline for first-time visitors.
  */
-export default async function HomePage() {
-  const session = await auth();
-  const isAuthenticated = !!session?.user?.id;
-
+export default function HomePage() {
   return (
     <>
       <Nav />
@@ -74,29 +64,30 @@ export default async function HomePage() {
           <UploadForm />
 
           <p className="font-mono text-[11px] text-[#b0b0b5] tracking-[.08em] mt-5">
-            1 free analysis &nbsp;·&nbsp; then $3 per track or $19/mo unlimited
+            Your first analysis is free &nbsp;·&nbsp; no signup required
           </p>
         </section>
       </div>
 
-      {/* ── Manual mode ── */}
+      {/* ── Manual mode (secondary, demoted) ── */}
       <div id="manual" className="border-b border-black/[.08] bg-[#fafafa]">
-        <section className="max-w-3xl mx-auto px-6 py-20">
-          <div className="text-center mb-10">
-            <span className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-3 block">
-              Or build manually
-            </span>
-            <h2 className="font-sans font-black tracking-[-0.035em] text-[#1d1d1f] mb-3 text-[clamp(26px,3.2vw,38px)]">
-              Know your BPM? Skip the upload.
-            </h2>
-            <p className="text-[15px] text-[#6e6e73] max-w-[480px] mx-auto leading-[1.6]">
-              Manual mode is generous once you sign in. Specify your spec
-              directly and generate as many cue tracks as you need.
-              {!isAuthenticated && ' Sign up free to enable.'}
-            </p>
-          </div>
-
-          <TrackForm isAuthenticated={isAuthenticated} />
+        <section className="max-w-3xl mx-auto px-6 py-20 text-center">
+          <span className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-3 block">
+            Or build manually
+          </span>
+          <h2 className="font-sans font-black tracking-[-0.035em] text-[#1d1d1f] mb-3 text-[clamp(26px,3.2vw,38px)]">
+            Know your BPM? Skip the upload.
+          </h2>
+          <p className="text-[15px] text-[#6e6e73] max-w-[480px] mx-auto leading-[1.6] mb-7">
+            Enter your tempo, sections, and click sound directly — handy when
+            you&apos;re charting a song from scratch.
+          </p>
+          <Link
+            href="/create?mode=manual"
+            className="inline-flex items-center px-6 py-3 bg-white border border-black/[.13] text-[#1d1d1f] text-[14px] font-semibold rounded-full hover:opacity-75 transition-opacity"
+          >
+            Open manual mode
+          </Link>
         </section>
       </div>
 
@@ -181,7 +172,7 @@ export default async function HomePage() {
                 Pay per download. No subscription needed.
               </p>
               <Link
-                href="#manual"
+                href="/create"
                 className="flex items-center justify-center w-full py-2.5 text-[14px] font-semibold rounded-lg border border-black/[.13] text-[#1d1d1f] hover:opacity-70 transition-opacity"
               >
                 Get Started
@@ -221,7 +212,7 @@ export default async function HomePage() {
           Drop your track. Get a cue-track back.
         </p>
         <Link
-          href="#manual"
+          href="/create"
           className="inline-flex items-center px-7 py-3 bg-[#1d1d1f] text-[#f5f5f7] text-[15px] font-semibold rounded-full hover:opacity-80 transition-opacity"
         >
           Try it now
