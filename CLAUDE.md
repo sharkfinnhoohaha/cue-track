@@ -50,7 +50,7 @@ Files:
 - `src/lib/analyze-jobs.ts` — background runner. Atomically claims the job (`queued`→`running`), runs the detector, builds the `SongSpec`, inserts the draft `tracks` row, marks the job `done`. Deletes the blob in a `finally` so success and failure both clean up. **Worker is optional and resilient:** when configured + healthy it sends `{ blobUrl, mime }` JSON and the worker fetches the blob itself (bypasses Cloud Run's 32 MB body cap). When the worker is unset, or a configured worker is *unreachable* (network/DNS/timeout, 5xx, 401/403 — surfaced as `WorkerInfraError`), the runner downloads the blob and analyzes in-process via `src/lib/audio/analyze.ts`. Only a genuine bad-file error (decode/415/422) fails the job, since the in-process decoder would reject the same bytes.
 - `src/lib/audio/analyze.ts` — in-process detector (port of the worker's `analyze.ts`): decode MP3/WAV, music-tempo BPM, duration-banded section template. The worker-free fallback for the analyze pipeline, mirroring how `/api/tracks/generate` falls back to in-process rendering.
 - `src/app/api/health/worker/route.ts` — diagnostic. Reports whether `AUDIO_WORKER_URL`/`ML_WORKER_URL` are set and pings their `/health`. Use it to tell "worker unreachable" apart from "worker unset" instead of inferring from a generic UI error.
-- `src/app/api/tracks/analyze/jobs/[id]/route.ts` — poll endpoint. Returns `{ status, result, error }`. Identifier guard returns 404 (not 403) for jobs the caller didn't enqueue.
+- `src/app/api/tracks/analyze/jobs/[id]/route.ts` — poll endpoint. Returns `{ status, result, error }`. Identifier guard returns 404 (not 403) for jobs the caller didn't enqueue. Also does stale-job recovery: a job still `queued`/`running` past ~330s (a runner killed at `maxDuration`) is flipped to `failed` here so the client stops polling instead of hanging.
 - `src/lib/analyze-router.ts` — picks `template | foote | ml` per caller-stable hash (`ANALYZE_AB_SPLIT_PERCENT`). ML disabled by default; falls back to Foote when `ML_WORKER_URL` is unset.
 
 Why three hops instead of one:
@@ -81,10 +81,13 @@ Migrations live in `scripts/migrations/`. New tables (`analyze_jobs`, `upload_an
 
 ## Conventions and pitfalls
 
-- **Tests**: `npx vitest run`. 114 tests across the API routes and lib code. New API routes should mock `@/lib/db`, `@/auth`, and `@vercel/functions` waitUntil rather than hitting real services.
+- **Install**: `npm install`. The `.npmrc` sets `legacy-peer-deps=true` (required for the next-auth / `@auth/core` peer-dep diamond); a fresh clone needs it before `tsc`/tests resolve.
+- **Dev server**: `npm run dev` (Next dev on port 3000).
+- **Tests**: `npx vitest run` (or `npm test`). 130+ tests across the API routes and lib code. New API routes should mock `@/lib/db`, `@/auth`, and `@vercel/functions` waitUntil rather than hitting real services. `npm run test:audio` runs the audio-engine assertions (`scripts/test-audio.ts`); `npm run test:e2e` runs the Playwright suite.
 - **Typecheck**: `npx tsc --noEmit`. Must be clean before pushing.
 - **Build**: `npx next build`. The Sentry plugin wraps `next.config.mjs`; build is unaffected when `SENTRY_AUTH_TOKEN` is unset.
 - **lint**: ESLint is not configured (`npx next lint` prompts). Don't run lint as a gate.
+- **Prod logs via Claude**: the claude.ai Vercel MCP 403s for this team (scope `overlook-strategy`). Use the local `vercel` CLI (authed as `sharkfinnhoohaha`) or the dashboard for runtime logs and deployments.
 - **Commit style**: lowercase imperative with scoped prefix: `fix(upload): …`, `feat(api/tracks/analyze): …`, `chore: …`. See `git log` for the established pattern.
 - **Don't 6924814-bait**: `Audio worker error` is a string from the pre-async analyze route (`6924814`). It can't be produced by the current pipeline. If you see it, the deployed bundle is stale.
 - **Don't bypass the blob host check.** `src/app/api/tracks/analyze/route.ts:isAllowedBlobUrl` restricts the server-side fetch to `*.blob.vercel-storage.com`. Removing this turns the route into an SSRF gadget.
