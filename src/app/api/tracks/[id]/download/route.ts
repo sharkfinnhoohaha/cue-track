@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { SongSpec } from '@/types';
+import { checkTrackAccess } from '@/lib/payment-access';
 
 export const maxDuration = 60;
 export const runtime = 'nodejs';
@@ -68,8 +69,8 @@ export async function GET(
 
   // --- Payment gate (skip for previews) --------------------------------
   if (!isPreview) {
-    const access = await checkPaymentAccess(id);
-    if (!access.allowed) {
+    const allowed = await checkTrackAccess(id);
+    if (!allowed) {
       return NextResponse.json(
         {
           error: 'Payment required',
@@ -344,63 +345,4 @@ function sanitizeFilename(name: string | null | undefined): string {
     .replace(/[^a-z0-9_\-]+/gi, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 80);
-}
-
-interface AccessResult {
-  allowed: boolean;
-}
-
-/**
- * Determines whether a non-preview download is allowed for a given track.
- *
- * @param trackId - The track's UUID to check access for
- * @returns `{ allowed: true }` if a paid purchase exists for the track or the track's owner has an active subscription, `{ allowed: false }` otherwise; returns `{ allowed: false }` on database errors.
- */
-async function checkPaymentAccess(trackId: string): Promise<AccessResult> {
-  // DATABASE_URL is required at the top of GET; if we got here, it is set.
-  try {
-    const { db, purchases, users, tracks } = await import('@/lib/db');
-
-    // Check 1: paid purchase exists for this track
-    const paidPurchase = await db
-      .select({ id: purchases.id })
-      .from(purchases)
-      .where(
-        and(
-          eq(purchases.trackId, trackId),
-          eq(purchases.status, 'paid'),
-        ),
-      )
-      .limit(1);
-
-    if (paidPurchase.length > 0) {
-      return { allowed: true };
-    }
-
-    // Check 2: track owner is an active Pro subscriber
-    const trackRows = await db
-      .select({ userId: tracks.userId })
-      .from(tracks)
-      .where(eq(tracks.id, trackId))
-      .limit(1);
-
-    if (trackRows.length > 0 && trackRows[0].userId) {
-      const userRows = await db
-        .select({ subscriptionStatus: users.subscriptionStatus })
-        .from(users)
-        .where(eq(users.id, trackRows[0].userId))
-        .limit(1);
-
-      if (userRows.length > 0 && userRows[0].subscriptionStatus === 'active') {
-        return { allowed: true };
-      }
-    }
-
-    return { allowed: false };
-  } catch (dbError) {
-    console.error('[download] Payment check failed:', dbError);
-    // Fail closed when the DB check itself errors. Previously this failed open,
-    // which is permissive but risky once real payments are flowing.
-    return { allowed: false };
-  }
 }

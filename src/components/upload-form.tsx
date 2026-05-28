@@ -289,12 +289,12 @@ export function UploadForm() {
             You&apos;ve used your free analysis
           </p>
           <h3 className="font-sans font-black tracking-[-0.03em] text-[#1d1d1f] mb-3 text-[clamp(22px,3vw,30px)]">
-            One more track? Pick a plan.
+            Want unlimited uploads? Go Pro.
           </h3>
           <p className="text-[14px] text-[#6e6e73] max-w-[440px] mx-auto mb-7 leading-[1.55]">
             You&apos;ve analyzed {paywall.used} of {paywall.limit} free uploads.
-            Subscribe Pro for unlimited analyses + Studio voices, or grab a
-            single track for the next set.
+            Pro unlocks unlimited analyses + Studio voices. Single-track
+            downloads ($3) only unlock tracks you&apos;ve already created.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-[480px] mx-auto">
             <Link

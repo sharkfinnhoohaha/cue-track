@@ -19,6 +19,7 @@
 
 import NextAuth, { type NextAuthConfig } from 'next-auth';
 import Nodemailer from 'next-auth/providers/nodemailer';
+import Google from 'next-auth/providers/google';
 import type { JWT } from 'next-auth/jwt';
 import { DrizzleAdapter } from '@auth/drizzle-adapter';
 import type { SubscriptionStatus } from '@/types';
@@ -93,10 +94,25 @@ function buildAuthConfig(): NextAuthConfig {
       : {}),
   });
 
+  const providers: NextAuthConfig['providers'] = [nodemailerProvider];
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    providers.push(
+      Google({
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        // Google verifies email ownership, so linking a Google sign-in to an
+        // existing user with the same email is safe here — and desirable: a
+        // Pro buyer whose users row was created by the Stripe webhook (keyed
+        // by email) gets that same row + active subscription on first sign-in.
+        allowDangerousEmailAccountLinking: true,
+      }),
+    );
+  }
+
   return {
     ...(adapter ? { adapter } : {}),
     session: { strategy: 'jwt' },
-    providers: [nodemailerProvider],
+    providers,
     pages: {
       signIn: '/auth/signin',
       verifyRequest: '/auth/verify',

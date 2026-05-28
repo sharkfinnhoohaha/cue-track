@@ -123,6 +123,18 @@ export interface TrackRecord {
   createdAt: string;
   email: string | null;
   userId: string | null;
+  /**
+   * True when the caller has access to the full (non-preview) audio: either
+   * a paid purchase exists for this track, or the owner is on an active Pro
+   * subscription. Set by GET /api/tracks/[id]; omitted from list responses.
+   */
+  hasAccess?: boolean;
+}
+
+export interface TracksListResponse {
+  tracks: TrackRecord[];
+  isPro: boolean;
+  stripeCustomerId: string | null;
 }
 
 export interface PurchaseRecord {

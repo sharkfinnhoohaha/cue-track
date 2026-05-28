@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import type { TrackRecord } from '@/types';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
@@ -214,43 +214,44 @@ function AudioPlayer({ src }: { src: string }) {
 
 export default function TrackDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const trackId = params.id as string;
+  const isCheckoutSuccess = searchParams?.get('checkout') === 'success';
   const [track, setTrack] = useState<TrackRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  // True while we're waiting for the Stripe webhook to flip hasAccess after
+  // the buyer returns from Checkout. Stays true until either hasAccess goes
+  // true (we then auto-download) or the poll budget expires.
+  const [finalizing, setFinalizing] = useState(false);
 
-  useEffect(() => {
-    const fetchTrack = async () => {
-      try {
-        const res = await fetch(`/api/tracks/${trackId}`);
-        if (!res.ok) throw new Error('Track not found');
-        const data = await res.json();
-        setTrack(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load track');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTrack();
+  const fetchTrack = useCallback(async (): Promise<TrackRecord> => {
+    const res = await fetch(`/api/tracks/${trackId}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Track not found');
+    return (await res.json()) as TrackRecord;
   }, [trackId]);
 
-  const handleCheckout = async () => {
-    setDownloading(true);
-    try {
-      const res = await fetch(`/api/tracks/${trackId}/checkout`, { method: 'POST' });
-      if (!res.ok) throw new Error('Checkout failed');
-      const data = await res.json();
-      if (data.url) { window.location.href = data.url; }
-    } catch {
-      setError('Failed to start checkout. Please try again.');
-    } finally {
-      setDownloading(false);
-    }
-  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchTrack();
+        if (!cancelled) setTrack(data);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load track');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchTrack]);
 
-  const handleDownload = async () => {
+  const handleDownload = useCallback(async () => {
     setDownloading(true);
     try {
       const res = await fetch(`/api/tracks/${trackId}/download`);
@@ -266,6 +267,71 @@ export default function TrackDetailPage() {
       URL.revokeObjectURL(url);
     } catch {
       setError('Download failed. Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  }, [track?.title, track?.spec.format, trackId]);
+
+  // After returning from Stripe Checkout we land here with ?checkout=success
+  // before the webhook has necessarily fired. Poll until hasAccess flips
+  // true (then auto-download), or give up after ~30s.
+  useEffect(() => {
+    if (!isCheckoutSuccess) return;
+    if (!track || track.hasAccess) return;
+    let cancelled = false;
+    setFinalizing(true);
+    const POLL_MS = 2000;
+    const MAX_ATTEMPTS = 15;
+
+    (async () => {
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        await new Promise((r) => setTimeout(r, POLL_MS));
+        if (cancelled) return;
+        try {
+          const next = await fetchTrack();
+          if (cancelled) return;
+          setTrack(next);
+          if (next.hasAccess) {
+            setFinalizing(false);
+            handleDownload();
+            return;
+          }
+        } catch {
+          // Transient — keep polling until the budget runs out.
+        }
+      }
+      if (!cancelled) setFinalizing(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isCheckoutSuccess, track, fetchTrack, handleDownload]);
+
+  const handleCheckout = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ trackId, plan: 'single' }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || 'Checkout failed');
+      }
+      const data = (await res.json()) as { sessionUrl?: string };
+      if (data.sessionUrl) {
+        window.location.href = data.sessionUrl;
+      } else {
+        throw new Error('Checkout did not return a URL');
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to start checkout. Please try again.',
+      );
     } finally {
       setDownloading(false);
     }
@@ -305,7 +371,7 @@ export default function TrackDetailPage() {
   const totalBars = track.spec.sections.reduce((sum, s) => sum + s.bars, 0);
   const tsLabel = `${track.spec.timeSignature.beats}/${track.spec.timeSignature.subdivision}`;
   const createdDate = new Date(track.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const isPaid = track.fullUrl !== null;
+  const isPaid = track.hasAccess === true;
   const isRendering = track.status === 'rendering';
 
   return (
@@ -365,20 +431,38 @@ export default function TrackDetailPage() {
 
         {track.status === 'ready' && (
           <div className="flex flex-col items-center gap-3 pt-4">
-            {isPaid ? (
-              <Button variant="primary" size="lg" onClick={handleDownload} loading={downloading} className="min-w-[240px] glow-accent">
-                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
-                  <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
-                </svg>
-                Download Full Track
-              </Button>
+            {finalizing ? (
+              <>
+                <div className="flex items-center gap-2 text-sm text-[#1d1d1f]">
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-3 w-3 rounded-full border-2 border-[#1d1d1f] border-t-transparent animate-spin"
+                  />
+                  Finalizing your purchase…
+                </div>
+                <p className="text-xs text-muted max-w-[360px] text-center">
+                  Stripe is confirming the payment. Your download will start automatically — usually within a few seconds.
+                </p>
+              </>
+            ) : isPaid ? (
+              <>
+                <Button variant="primary" size="lg" onClick={handleDownload} loading={downloading} className="min-w-[240px] glow-accent">
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
+                    <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
+                  </svg>
+                  Download Full Track
+                </Button>
+                <p className="text-xs text-muted">{`${track.spec.format.toUpperCase()} file, studio quality`}</p>
+              </>
             ) : (
-              <Button variant="primary" size="lg" onClick={handleCheckout} loading={downloading} className="min-w-[240px] glow-accent">
-                Download Full Track &mdash; $3
-              </Button>
+              <>
+                <Button variant="primary" size="lg" onClick={handleCheckout} loading={downloading} className="min-w-[240px] glow-accent">
+                  Download Full Track &mdash; $3
+                </Button>
+                <p className="text-xs text-muted">One-time payment. No subscription required.</p>
+              </>
             )}
-            <p className="text-xs text-muted">{isPaid ? `${track.spec.format.toUpperCase()} file, studio quality` : 'One-time payment. No subscription required.'}</p>
           </div>
         )}
       </main>

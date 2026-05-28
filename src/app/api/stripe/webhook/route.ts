@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const plan = session.metadata?.plan;
   const trackId = session.metadata?.trackId;
+  const userId = session.metadata?.userId;
   const email = session.customer_email ?? session.customer_details?.email ?? '';
 
   if (!process.env.DATABASE_URL) { console.warn('[stripe/webhook] DATABASE_URL not set -- skipping DB writes'); return; }
@@ -68,14 +69,26 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   } else if (plan === 'pro') {
     const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null;
     const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id ?? null;
+    const fields = { stripeCustomerId: customerId, subscriptionStatus: 'active' as const, subscriptionId };
+
+    // Prefer the metadata.userId set by the authenticated /api/stripe/checkout
+    // call. Falling back to email keeps older flows (and any out-of-band
+    // checkout sessions created without metadata) working.
+    if (userId) {
+      const result = await db.update(users).set(fields).where(eq(users.id, userId)).returning({ id: users.id });
+      if (result.length > 0) return;
+      console.warn(`[stripe/webhook] Pro checkout metadata.userId=${userId} matched no users row; falling back to email`);
+    }
 
     if (email) {
       const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
       if (existing.length > 0) {
-        await db.update(users).set({ stripeCustomerId: customerId, subscriptionStatus: 'active', subscriptionId }).where(eq(users.email, email));
+        await db.update(users).set(fields).where(eq(users.email, email));
       } else {
-        await db.insert(users).values({ email, stripeCustomerId: customerId, subscriptionStatus: 'active', subscriptionId });
+        await db.insert(users).values({ email, ...fields });
       }
+    } else {
+      console.warn('[stripe/webhook] Pro checkout completed with no userId and no email; subscription is orphaned');
     }
   }
 }

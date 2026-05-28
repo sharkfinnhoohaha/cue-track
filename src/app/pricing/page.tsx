@@ -35,15 +35,17 @@ const PLANS = [
     period: '/month',
     description: 'Unlimited tracks for working musicians and worship teams.',
     features: [
-      'Unlimited track downloads',
+      'Unlimited uploads & analyses',
+      'Unlimited downloads from your own tracks',
       'Saved presets & templates',
       'Priority rendering queue',
       'All premium voices',
-      'Batch generation',
       'Cancel anytime',
     ],
     cta: 'Start Pro',
-    ctaHref: '/api/subscribe?plan=pro',
+    // Unused for Pro — the button has an onClick handler that starts Stripe
+    // Checkout. Kept here so PLANS stays a uniform-shape array.
+    ctaHref: '#',
     highlighted: true,
   },
 ];
@@ -125,6 +127,41 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 }
 
 export default function PricingPage() {
+  const [proLoading, setProLoading] = useState(false);
+  const [proError, setProError] = useState<string | null>(null);
+
+  const handleStartPro = async () => {
+    setProLoading(true);
+    setProError(null);
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ plan: 'pro' }),
+      });
+      if (res.status === 401) {
+        // Not signed in — bounce through sign-in and come back to /pricing.
+        window.location.href = `/auth/signin?callbackUrl=${encodeURIComponent('/pricing')}`;
+        return;
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || `Checkout failed (${res.status})`);
+      }
+      const data = (await res.json()) as { sessionUrl?: string };
+      if (data.sessionUrl) {
+        window.location.href = data.sessionUrl;
+      } else {
+        throw new Error('Checkout did not return a URL');
+      }
+    } catch (err) {
+      setProError(
+        err instanceof Error ? err.message : 'Could not start Pro checkout.',
+      );
+      setProLoading(false);
+    }
+  };
+
   return (
     <>
       <Nav />
@@ -181,15 +218,32 @@ export default function PricingPage() {
               </ul>
 
               <div className="mt-8">
-                <Link href={plan.ctaHref} className="block">
-                  <Button
-                    variant={plan.highlighted ? 'primary' : 'secondary'}
-                    size="lg"
-                    className="w-full"
-                  >
-                    {plan.cta}
-                  </Button>
-                </Link>
+                {plan.id === 'pro' ? (
+                  <>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      className="w-full"
+                      onClick={handleStartPro}
+                      loading={proLoading}
+                    >
+                      {plan.cta}
+                    </Button>
+                    {proError && (
+                      <p className="mt-3 text-xs text-red-600 text-center">{proError}</p>
+                    )}
+                  </>
+                ) : (
+                  <Link href={plan.ctaHref} className="block">
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      className="w-full"
+                    >
+                      {plan.cta}
+                    </Button>
+                  </Link>
+                )}
               </div>
             </div>
           ))}

@@ -13,6 +13,8 @@ export default function DashboardPage() {
   const [tracks, setTracks] = useState<TrackRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPro, setIsPro] = useState(false);
+  const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -22,6 +24,7 @@ export default function DashboardPage() {
           const data = await res.json();
           setTracks(data.tracks || []);
           setIsPro(data.isPro || false);
+          setStripeCustomerId(data.stripeCustomerId ?? null);
         }
       } catch {
         // Silently fail -- will show empty state
@@ -31,6 +34,26 @@ export default function DashboardPage() {
     };
     fetchData();
   }, []);
+
+  const handleManageBilling = async () => {
+    if (!stripeCustomerId) return;
+    setPortalLoading(true);
+    try {
+      const res = await fetch('/api/stripe/portal', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ customerId: stripeCustomerId }),
+      });
+      const data = (await res.json()) as { url?: string };
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+    } catch {
+      // Best-effort; the user can still cancel from their Stripe receipt.
+    }
+    setPortalLoading(false);
+  };
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
@@ -68,14 +91,26 @@ export default function DashboardPage() {
                 : 'Manage and download your click tracks'}
             </p>
           </div>
-          <Link href="/create">
-            <Button variant="primary" size="md">
-              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
-              </svg>
-              New Track
-            </Button>
-          </Link>
+          <div className="flex items-center gap-3">
+            {isPro && stripeCustomerId && (
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={handleManageBilling}
+                loading={portalLoading}
+              >
+                Manage billing
+              </Button>
+            )}
+            <Link href="/create">
+              <Button variant="primary" size="md">
+                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                </svg>
+                New Track
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Loading state */}
