@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { auth } from '@/auth';
 import { getClientIpHash } from '@/lib/rate-limit';
+import { ACCEPTED_AUDIO_MIME_TYPES } from '@/lib/audio/mime';
 
 export const runtime = 'nodejs';
 
@@ -26,14 +27,7 @@ export const runtime = 'nodejs';
 
 const MAX_UPLOAD_BYTES = 150 * 1024 * 1024;
 
-const ALLOWED_CONTENT_TYPES = [
-  'audio/mpeg',
-  'audio/mp3',
-  'audio/wav',
-  'audio/x-wav',
-  'audio/wave',
-  'audio/vnd.wave',
-];
+const ALLOWED_CONTENT_TYPES = [...ACCEPTED_AUDIO_MIME_TYPES];
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {

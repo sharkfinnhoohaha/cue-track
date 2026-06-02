@@ -87,9 +87,11 @@ async function readJsonBody<T>(req: IncomingMessage, maxBytes = 1_000_000): Prom
   });
 }
 
+const MAX_AUDIO_BYTES = 160 * 1024 * 1024;
+
 async function readRawBody(
   req: IncomingMessage,
-  maxBytes = 160 * 1024 * 1024,
+  maxBytes = MAX_AUDIO_BYTES,
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -106,6 +108,40 @@ async function readRawBody(
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
+}
+
+/**
+ * Drain a fetch Response body into a Buffer, aborting once it exceeds
+ * maxBytes. Mirrors readRawBody's cap for the blob-download path so an
+ * oversized blob can't buffer unbounded and OOM the worker.
+ */
+async function readResponseBodyCapped(
+  response: Response,
+  maxBytes = MAX_AUDIO_BYTES,
+): Promise<Buffer> {
+  if (!response.body) {
+    const buf = Buffer.from(await response.arrayBuffer());
+    if (buf.length > maxBytes) {
+      throw new Error(`Blob exceeds ${maxBytes} bytes`);
+    }
+    return buf;
+  }
+  const chunks: Buffer[] = [];
+  let total = 0;
+  const reader = response.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      total += value.length;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error(`Blob exceeds ${maxBytes} bytes`);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  }
+  return Buffer.concat(chunks);
 }
 
 function authorized(req: IncomingMessage): boolean {
@@ -299,8 +335,17 @@ async function resolveAudioPayload(
         jsonResponse(res, 502, { error: `Failed to download blob: ${fetchRes.statusText} (${fetchRes.status})` });
         return null;
       }
-      const arrayBuffer = await fetchRes.arrayBuffer();
-      const body = Buffer.from(arrayBuffer);
+      let body: Buffer;
+      try {
+        body = await readResponseBodyCapped(fetchRes);
+      } catch (capErr) {
+        jsonResponse(res, 413, { error: (capErr as Error).message });
+        return null;
+      }
+      if (body.length === 0) {
+        jsonResponse(res, 400, { error: 'empty_body' });
+        return null;
+      }
       return { body, activeMime: mime, kind };
     } catch (err) {
       jsonResponse(res, 502, { error: `Failed to fetch blob URL: ${(err as Error).message}` });

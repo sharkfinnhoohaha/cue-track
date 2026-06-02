@@ -99,7 +99,9 @@ async def analyze_endpoint(
         try:
             logger.info("Downloading blob from URL: %s", blob_url)
             with urllib.request.urlopen(blob_url, timeout=60) as response:
-                body = response.read()
+                # Read at most MAX_BYTES + 1 so an oversized blob can't OOM the
+                # worker: we bound the read instead of buffering the whole body.
+                body = response.read(MAX_BYTES + 1)
         except HTTPError as err:
             logger.error("Failed to download blob: HTTP %d %s", err.code, err.reason)
             raise HTTPException(status_code=502, detail=f"Failed to download blob: HTTP {err.code}")
@@ -109,6 +111,13 @@ async def analyze_endpoint(
         except Exception as err:
             logger.error("Unknown error downloading blob: %s", err)
             raise HTTPException(status_code=502, detail=f"Failed to fetch blob: {err}")
+
+        # Mirror the raw-upload guards so the JSON/blob path (the one the live
+        # pipeline always uses) is held to the same empty/size limits.
+        if not body:
+            raise HTTPException(status_code=400, detail="empty_body")
+        if len(body) > MAX_BYTES:
+            raise HTTPException(status_code=413, detail=f"payload exceeds {MAX_BYTES} bytes")
     else:
         mime = _normalize_mime(content_type)
         if not mime:
