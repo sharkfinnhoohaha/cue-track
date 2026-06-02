@@ -170,6 +170,11 @@ async function callWorker(
   ) {
     throw new Error('Worker returned malformed payload (missing bpm/duration/sections)');
   }
+  // sampleRate is non-critical metadata; default it rather than fail an
+  // otherwise-valid analysis if a worker omits it or sends a bad value.
+  if (typeof bodyRes.sampleRate !== 'number' || !Number.isFinite(bodyRes.sampleRate) || bodyRes.sampleRate <= 0) {
+    bodyRes.sampleRate = 44100;
+  }
   return bodyRes;
 }
 

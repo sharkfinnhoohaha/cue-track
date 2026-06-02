@@ -144,13 +144,13 @@ export async function POST(request: NextRequest) {
   // --- Identify caller --------------------------------------------------
   const session = await auth();
   const userId = session?.user?.id ?? null;
+  const ipHash = getClientIpHash(request);
   let rateIdentifier: string;
   let rateKind: 'auth' | 'anon';
   if (userId) {
     rateIdentifier = `user:${userId}`;
     rateKind = 'auth';
   } else {
-    const ipHash = getClientIpHash(request);
     if (!ipHash) {
       return NextResponse.json(
         {
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
   }
 
   const quotaIdentifiers = userId
-    ? [`user:${userId}`, ...(getClientIpHash(request) ? [`ip:${getClientIpHash(request)}`] : [])]
+    ? [`user:${userId}`, ...(ipHash ? [`ip:${ipHash}`] : [])]
     : [rateIdentifier];
 
   // --- Rate limit (shared with /generate quota) -------------------------

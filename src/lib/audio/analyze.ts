@@ -18,6 +18,7 @@
 import { WaveFile } from 'wavefile';
 import { MPEGDecoder } from 'mpg123-decoder';
 import MusicTempo from 'music-tempo';
+import { canonicalizeAudioMime } from './mime';
 
 export interface SuggestedSection {
   id: string;
@@ -32,19 +33,11 @@ export interface AnalyzeResult {
   suggestedSections: SuggestedSection[];
 }
 
-const WAV_MIMES = new Set([
-  'audio/wav',
-  'audio/x-wav',
-  'audio/wave',
-  'audio/vnd.wave',
-]);
-
-const MP3_MIMES = new Set(['audio/mpeg', 'audio/mp3']);
-
 export function isSupportedMime(mime: string): 'wav' | 'mp3' | null {
   const m = mime.toLowerCase().split(';')[0].trim();
-  if (WAV_MIMES.has(m)) return 'wav';
-  if (MP3_MIMES.has(m)) return 'mp3';
+  const canonical = canonicalizeAudioMime(m);
+  if (canonical === 'audio/wav') return 'wav';
+  if (canonical === 'audio/mpeg') return 'mp3';
   return null;
 }
 
