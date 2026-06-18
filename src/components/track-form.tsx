@@ -316,7 +316,7 @@ export function TrackForm({
             <div>
               <label className="label font-mono text-xs uppercase tracking-wider">BPM</label>
               <div className="flex gap-2">
-                <input type="number" min={30} max={300} value={spec.bpm} onChange={(e) => { const val = parseInt(e.target.value, 10); if (!isNaN(val)) update('bpm', Math.min(300, Math.max(30, val))); }} className="input font-mono flex-1" />
+                <input type="number" min={30} max={300} value={spec.bpm} onChange={(e) => { const val = parseInt(e.target.value, 10); if (!isNaN(val)) update('bpm', val); }} onBlur={(e) => { const val = parseInt(e.target.value, 10); update('bpm', isNaN(val) ? 120 : Math.min(300, Math.max(30, val))); }} className="input font-mono flex-1" />
                 <button type="button" onClick={tap} className="btn-secondary shrink-0 font-mono text-xs px-3" title="Tap to set tempo">TAP</button>
               </div>
               <p className="mt-1.5 text-xs text-muted">Tap the button rhythmically to detect tempo</p>
@@ -325,7 +325,7 @@ export function TrackForm({
               <Select label="Time Signature" value={currentTsValue} onChange={(e) => handleTsChange(e.target.value)} options={TIME_SIGNATURES.map((t) => ({ value: t.value, label: t.label }))} />
               {isCustomTs && (
                 <div className="mt-2 flex items-center gap-2">
-                  <input type="number" min={1} max={15} value={spec.timeSignature.beats} onChange={(e) => { const val = parseInt(e.target.value, 10); if (!isNaN(val) && val >= 1 && val <= 15) update('timeSignature', { ...spec.timeSignature, beats: val }); }} className="input w-16 text-center font-mono" aria-label="Beats per bar" />
+                  <input type="number" min={1} max={12} value={spec.timeSignature.beats} onChange={(e) => { const val = parseInt(e.target.value, 10); if (!isNaN(val)) update('timeSignature', { ...spec.timeSignature, beats: val }); }} onBlur={(e) => { const val = parseInt(e.target.value, 10); update('timeSignature', { ...spec.timeSignature, beats: isNaN(val) ? 4 : Math.min(12, Math.max(1, val)) }); }} className="input w-16 text-center font-mono" aria-label="Beats per bar" />
                   <span className="text-muted font-mono">/</span>
                   <select value={spec.timeSignature.subdivision} onChange={(e) => update('timeSignature', { ...spec.timeSignature, subdivision: parseInt(e.target.value, 10) })} className="input w-16 text-center font-mono appearance-none" aria-label="Beat subdivision">
                     <option value={2}>2</option><option value={4}>4</option><option value={8}>8</option><option value={16}>16</option>

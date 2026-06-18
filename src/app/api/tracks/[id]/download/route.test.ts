@@ -60,6 +60,11 @@ vi.mock('@/lib/audio/engine', () => ({
   renderPreviewOnly: mockRenderPreview,
 }));
 
+// The route now resolves the requesting user via auth() to scope Pro-owner
+// access to the owner. Mock it as anonymous; the access tests here exercise
+// the paid-purchase and no-access paths, neither of which needs a session.
+vi.mock('@/auth', () => ({ auth: vi.fn().mockResolvedValue(null) }));
+
 import { GET } from './route';
 
 const VALID_UUID = '12345678-1234-1234-1234-123456789012';

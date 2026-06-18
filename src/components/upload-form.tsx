@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { upload } from '@vercel/blob/client';
@@ -60,9 +60,16 @@ function resolveUploadMime(file: File): string | null {
   return raw;
 }
 
-async function pollAnalyzeJob(statusUrl: string): Promise<PolledJob> {
+/** Thrown when the user cancels or navigates away mid-analysis. */
+const CANCELLED = '__cancelled__';
+
+async function pollAnalyzeJob(
+  statusUrl: string,
+  shouldCancel: () => boolean,
+): Promise<PolledJob> {
   for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    if (shouldCancel()) throw new Error(CANCELLED);
     const res = await fetch(statusUrl, { cache: 'no-store' });
     if (!res.ok) {
       let serverError: string | null = null;
@@ -93,22 +100,39 @@ export function UploadForm() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isTranscoding, setIsTranscoding] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Flips to true on unmount or when the user cancels, so an in-flight poll
+  // (which can run for several minutes) stops fetching and never calls
+  // setState on an unmounted component.
+  const cancelledRef = useRef(false);
 
-  const acceptFile = useCallback((candidate: File | null) => {
-    if (!candidate) return;
-    if (candidate.size > MAX_FILE_BYTES) {
-      setError(
-        `File is over ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB. Trim or re-export at a lower bitrate.`,
-      );
-      return;
-    }
-    if (!/^audio\//.test(candidate.type) && !ACCEPTED_EXT_RE.test(candidate.name)) {
-      setError('Audio files only. Try MP3, WAV, M4A, AAC, OGG, or FLAC.');
-      return;
-    }
-    setError(null);
-    setFile(candidate);
+  useEffect(() => {
+    return () => {
+      cancelledRef.current = true;
+    };
   }, []);
+
+  const acceptFile = useCallback(
+    (candidate: File | null) => {
+      if (!candidate) return;
+      // Ignore new files while a transcode/analysis is in flight: swapping the
+      // file here would change the displayed name/size while the poll keeps
+      // running against the original job, redirecting to the wrong track.
+      if (isAnalyzing || isTranscoding) return;
+      if (candidate.size > MAX_FILE_BYTES) {
+        setError(
+          `File is over ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB. Trim or re-export at a lower bitrate.`,
+        );
+        return;
+      }
+      if (!/^audio\//.test(candidate.type) && !ACCEPTED_EXT_RE.test(candidate.name)) {
+        setError('Audio files only. Try MP3, WAV, M4A, AAC, OGG, or FLAC.');
+        return;
+      }
+      setError(null);
+      setFile(candidate);
+    },
+    [isAnalyzing, isTranscoding],
+  );
 
   const onInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -126,10 +150,14 @@ export function UploadForm() {
     [acceptFile],
   );
 
-  const onDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
+  const onDragOver = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      if (isAnalyzing || isTranscoding) return;
+      setIsDragging(true);
+    },
+    [isAnalyzing, isTranscoding],
+  );
 
   const onDragLeave = useCallback(() => {
     setIsDragging(false);
@@ -137,6 +165,7 @@ export function UploadForm() {
 
   const handleAnalyze = useCallback(async () => {
     if (!file || isAnalyzing || isTranscoding) return;
+    cancelledRef.current = false;
     setError(null);
     setPaywall(null);
 
@@ -250,7 +279,10 @@ export function UploadForm() {
         throw new Error('Analyze response did not include a jobId');
       }
 
-      const job = await pollAnalyzeJob(enqueueBody.statusUrl);
+      const job = await pollAnalyzeJob(
+        enqueueBody.statusUrl,
+        () => cancelledRef.current,
+      );
       if (job.status === 'failed') {
         throw new Error(friendlyWorkerError(job.error));
       }
@@ -261,8 +293,13 @@ export function UploadForm() {
       if (!trackId) {
         throw new Error('Analyze finished without a track id');
       }
+      if (cancelledRef.current) return;
       router.push(`/tracks/${trackId}/review`);
     } catch (err) {
+      // Cancellation / unmount is not an error the user should see.
+      if (cancelledRef.current || (err instanceof Error && err.message === CANCELLED)) {
+        return;
+      }
       setError(
         err instanceof Error
           ? err.message
@@ -271,6 +308,12 @@ export function UploadForm() {
       setIsAnalyzing(false);
     }
   }, [file, isAnalyzing, isTranscoding, router]);
+
+  const cancelAnalyze = useCallback(() => {
+    cancelledRef.current = true;
+    setIsAnalyzing(false);
+    setIsTranscoding(false);
+  }, []);
 
   const reset = useCallback(() => {
     setFile(null);
@@ -411,6 +454,13 @@ export function UploadForm() {
                   Most songs take 10 to 90 seconds. Longer tracks can take a
                   couple of minutes, so keep this tab open.
                 </p>
+                <button
+                  type="button"
+                  onClick={cancelAnalyze}
+                  className="text-[12px] text-[#6e6e73] underline hover:text-[#1d1d1f] transition-colors"
+                >
+                  Cancel
+                </button>
               </div>
             ) : (
               <div className="flex items-center justify-center gap-3">

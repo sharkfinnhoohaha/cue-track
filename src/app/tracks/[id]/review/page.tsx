@@ -51,6 +51,7 @@ export default async function ReviewPage({ params }: ReviewPageProps) {
       spec: tracks.spec,
       status: tracks.status,
       duration: tracks.duration,
+      userId: tracks.userId,
     })
     .from(tracks)
     .where(eq(tracks.id, id))
@@ -65,6 +66,15 @@ export default async function ReviewPage({ params }: ReviewPageProps) {
 
   const session = await auth();
   const isAuthenticated = !!session?.user?.id;
+
+  // Owner scoping mirrors /api/tracks/generate: a draft attributed to a
+  // registered user (userId set) may only be reviewed by that user, so a
+  // signed-in visitor can't open someone else's draft by guessing its UUID.
+  // Anonymous drafts (userId null) rely on UUID-as-bearer, matching the
+  // no-account upload flow.
+  if (track.userId && session?.user?.id !== track.userId) {
+    notFound();
+  }
 
   // The spec column is typed as jsonb<SongSpec> at the schema layer; the
   // runtime value comes back as a plain object that matches the shape.

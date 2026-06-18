@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
+import { SubmitButton } from '@/components/submit-button';
 import { signIn, auth } from '@/auth';
 
 export const metadata: Metadata = {
@@ -18,12 +19,38 @@ function safeCallback(raw: string | string[] | undefined): string {
   return value;
 }
 
+// NextAuth redirects back to this custom sign-in page with `?error=<code>` for
+// several failures (bad OAuth callback, account-linking conflict, email send
+// failure). Without surfacing it the user just sees a pristine form and retries
+// the same failing action with no explanation.
+function errorMessage(raw: string | string[] | undefined): string | null {
+  const code = Array.isArray(raw) ? raw[0] : raw;
+  if (!code) return null;
+  switch (code) {
+    case 'OAuthAccountNotLinked':
+      return 'That email is already registered with a different sign-in method. Use the method you signed up with.';
+    case 'OAuthSignin':
+    case 'OAuthCallback':
+    case 'Callback':
+      return "We couldn't complete sign-in with that provider. Please try again.";
+    case 'EmailSignin':
+      return "We couldn't send the sign-in email. Check the address and try again.";
+    case 'AccessDenied':
+      return 'Access was denied. If this is a mistake, contact support.';
+    case 'Verification':
+      return 'That sign-in link has expired or was already used. Request a new one below.';
+    default:
+      return 'Something went wrong signing you in. Please try again.';
+  }
+}
+
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: { callbackUrl?: string | string[] };
+  searchParams: { callbackUrl?: string | string[]; error?: string | string[] };
 }) {
   const callbackUrl = safeCallback(searchParams.callbackUrl);
+  const signInError = errorMessage(searchParams.error);
 
   // Already signed in? Don't show the form — send them where they were headed
   // (e.g. /create, /pricing, /dashboard). Keeps the new nav "Sign in" link and
@@ -64,10 +91,19 @@ export default async function SignInPage({
           </p>
         </div>
 
+        {signInError && (
+          <div
+            role="alert"
+            className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+          >
+            {signInError}
+          </div>
+        )}
+
         {googleEnabled && (
           <form action={googleSignIn}>
-            <button
-              type="submit"
+            <SubmitButton
+              pendingLabel="Redirecting…"
               className="w-full flex items-center justify-center gap-3 rounded-lg border border-black/[.13] bg-white px-4 py-3 text-sm font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors"
             >
               <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18">
@@ -89,7 +125,7 @@ export default async function SignInPage({
                 />
               </svg>
               Continue with Google
-            </button>
+            </SubmitButton>
           </form>
         )}
 
@@ -115,12 +151,12 @@ export default async function SignInPage({
               placeholder="you@example.com"
               className="input px-4 py-3"
             />
-            <button
-              type="submit"
+            <SubmitButton
+              pendingLabel="Sending…"
               className="w-full btn btn-primary rounded-lg py-3 text-sm font-semibold"
             >
               Send sign-in link
-            </button>
+            </SubmitButton>
           </form>
         )}
 
