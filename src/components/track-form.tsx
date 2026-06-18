@@ -181,6 +181,62 @@ export function TrackForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSignupPrompt, setShowSignupPrompt] = useState(false);
+  const [previewState, setPreviewState] = useState<'idle' | 'loading' | 'playing'>('idle');
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  // Tear down the preview audio + object URL on unmount so a render in flight
+  // doesn't leak a blob URL or keep playing after navigation.
+  useEffect(() => {
+    return () => {
+      previewAudioRef.current?.pause();
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
+
+  const handlePreview = useCallback(async () => {
+    // Toggle off if already playing.
+    if (previewState === 'playing') {
+      previewAudioRef.current?.pause();
+      setPreviewState('idle');
+      return;
+    }
+    setPreviewError(null);
+    setPreviewState('loading');
+    try {
+      const res = await fetch('/api/tracks/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spec }),
+      });
+      if (!res.ok) {
+        const b = await res.json().catch(() => null);
+        throw new Error(b?.details || b?.error || `Preview failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      const url = URL.createObjectURL(blob);
+      previewUrlRef.current = url;
+      let audio = previewAudioRef.current;
+      if (!audio) {
+        audio = new Audio();
+        audio.addEventListener('ended', () => setPreviewState('idle'));
+        audio.addEventListener('pause', () =>
+          setPreviewState((s) => (s === 'playing' ? 'idle' : s)),
+        );
+        previewAudioRef.current = audio;
+      }
+      audio.src = url;
+      await audio.play();
+      setPreviewState('playing');
+    } catch (err) {
+      setPreviewState('idle');
+      setPreviewError(
+        err instanceof Error ? err.message : 'Could not play a preview. Try again.',
+      );
+    }
+  }, [spec, previewState]);
 
   // Restore any pending spec stashed by the sign-up redirect path. Skipped
   // when initialSpec is supplied (review screen) so the analyzer's
@@ -394,6 +450,32 @@ export function TrackForm({
       </Card>
 
       <div className="flex flex-col items-center gap-3 pt-2">
+        <button
+          type="button"
+          onClick={handlePreview}
+          disabled={previewState === 'loading' || spec.sections.length === 0}
+          className="inline-flex items-center gap-2 rounded-full border border-surface-border bg-surface px-5 py-2.5 text-sm font-semibold text-[#1d1d1f] transition-colors hover:border-black/30 disabled:opacity-50"
+        >
+          {previewState === 'loading' ? (
+            <>
+              <span aria-hidden="true" className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[#1d1d1f] border-t-transparent" />
+              Rendering preview…
+            </>
+          ) : previewState === 'playing' ? (
+            <>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="3.5" height="10" rx="1" /><rect x="8.5" y="2" width="3.5" height="10" rx="1" /></svg>
+              Stop preview
+            </>
+          ) : (
+            <>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><path d="M3 2.5v9a.5.5 0 0 0 .76.43l7.5-4.5a.5.5 0 0 0 0-.86l-7.5-4.5A.5.5 0 0 0 3 2.5Z" /></svg>
+              Preview the sound
+            </>
+          )}
+        </button>
+        {previewError && (
+          <p className="text-xs text-red-600 font-mono text-center">{previewError}</p>
+        )}
         <Button type="submit" variant="primary" size="lg" loading={isSubmitting} disabled={isSubmitting || isOverDurationLimit} className="w-full sm:w-auto sm:min-w-[240px] glow-accent">
           {isSubmitting
             ? 'Building...'

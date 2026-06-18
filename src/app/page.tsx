@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
 import { UploadForm } from '@/components/upload-form';
+import { DemoPlayer } from '@/components/demo-player';
 
 const STEPS = [
   {
@@ -63,9 +64,12 @@ export default function HomePage() {
 
           <UploadForm />
 
-          <p className="font-mono text-[11px] text-[#b0b0b5] tracking-[.08em] mt-5">
-            Your first analysis is free &nbsp;·&nbsp; no signup required
-          </p>
+          <div className="mt-6 flex flex-col items-center gap-3">
+            <DemoPlayer />
+            <p className="font-mono text-[11px] text-[#b0b0b5] tracking-[.08em]">
+              Your first analysis is free &nbsp;·&nbsp; no signup required
+            </p>
+          </div>
         </section>
       </div>
 
