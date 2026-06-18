@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { signOut } from 'next-auth/react';
 import { cn } from '@/lib/cn';
 
 const NAV_LINKS = [
@@ -39,6 +40,10 @@ export function Nav() {
       cancelled = true;
     };
   }, []);
+
+  const handleSignOut = () => {
+    void signOut({ callbackUrl: '/' });
+  };
 
   useEffect(() => {
     setMobileOpen(false);
@@ -86,6 +91,15 @@ export function Nav() {
               Sign in
             </Link>
           )}
+          {authed === true && (
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="text-[13px] text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+            >
+              Sign out
+            </button>
+          )}
           <Link
             href="/create"
             className="text-[13px] font-medium text-[#0066cc] hover:opacity-75 transition-opacity"
@@ -130,6 +144,15 @@ export function Nav() {
             >
               Sign in
             </Link>
+          )}
+          {authed === true && (
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="py-2 text-left text-[14px] text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+            >
+              Sign out
+            </button>
           )}
           <Link
             href="/create"

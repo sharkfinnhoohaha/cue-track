@@ -98,7 +98,7 @@ export function SectionList({ sections, onChange }: SectionListProps) {
             <span className="font-mono text-xs text-muted w-5 text-center flex-shrink-0">{index + 1}</span>
             <input type="text" value={section.name} onChange={(e) => updateSection(index, { name: e.target.value })} className="input flex-1 min-w-0" placeholder="Section name" aria-label={`Section ${index + 1} name`} />
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <input type="number" value={section.bars} onChange={(e) => { const val = parseInt(e.target.value, 10); if (!isNaN(val) && val >= 1 && val <= 99) updateSection(index, { bars: val }); }} min={1} max={99} className="input w-16 text-center font-mono" aria-label={`Section ${index + 1} bar count`} />
+              <input type="number" value={section.bars} onChange={(e) => { const val = parseInt(e.target.value, 10); if (!isNaN(val)) updateSection(index, { bars: val }); }} onBlur={(e) => { const val = parseInt(e.target.value, 10); updateSection(index, { bars: isNaN(val) ? 1 : Math.min(99, Math.max(1, val)) }); }} min={1} max={99} className="input w-16 text-center font-mono" aria-label={`Section ${index + 1} bar count`} />
               <span className="font-mono text-xs text-muted">bars</span>
             </div>
             <button type="button" onClick={() => removeSection(index)} className="flex-shrink-0 rounded-md p-1.5 text-muted hover:bg-red-50 hover:text-red-600 transition-colors" aria-label={`Delete section ${section.name}`}>

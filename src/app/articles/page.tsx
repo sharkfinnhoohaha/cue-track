@@ -35,7 +35,7 @@ const ARTICLES = [
 
 export default function ArticlesPage() {
   return (
-    <div className="min-h-screen bg-surface text-white">
+    <div className="min-h-screen bg-surface text-[#1d1d1f]">
       <Nav />
       <main className="pt-32 pb-20 px-6">
         <div className="max-w-4xl mx-auto">
@@ -44,7 +44,7 @@ export default function ArticlesPage() {
               Resources
             </p>
             <h1 className="font-display text-4xl sm:text-5xl mb-4">Articles</h1>
-            <p className="font-body text-lg text-neutral-400">
+            <p className="font-body text-lg text-[#6e6e73]">
               Practical guides for live musicians who use click tracks, cue tracks, and IEMs.
             </p>
           </header>
@@ -63,7 +63,7 @@ export default function ArticlesPage() {
                   <h2 className="font-display text-2xl mb-3 group-hover:text-accent-500 transition-colors">
                     {article.title}
                   </h2>
-                  <p className="font-body text-neutral-400 leading-relaxed">
+                  <p className="font-body text-[#6e6e73] leading-relaxed">
                     {article.description}
                   </p>
                 </div>

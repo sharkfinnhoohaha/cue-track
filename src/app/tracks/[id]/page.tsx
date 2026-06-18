@@ -226,6 +226,10 @@ export default function TrackDetailPage() {
   // the buyer returns from Checkout. Stays true until either hasAccess goes
   // true (we then auto-download) or the poll budget expires.
   const [finalizing, setFinalizing] = useState(false);
+  // Set when a post-checkout poll exhausts its budget without access. Lets us
+  // show "payment received, still processing" instead of silently reverting to
+  // the buy button (which makes a paid buyer think they were never charged).
+  const [finalizeTimedOut, setFinalizeTimedOut] = useState(false);
 
   const fetchTrack = useCallback(async (): Promise<TrackRecord> => {
     const res = await fetch(`/api/tracks/${trackId}`, { cache: 'no-store' });
@@ -263,20 +267,36 @@ export default function TrackDetailPage() {
 
   const handleDownload = useCallback(async () => {
     setDownloading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/tracks/${trackId}/download`);
-      if (!res.ok) throw new Error('Download failed');
+      if (!res.ok) {
+        // Distinguish the cases a generic "try again" would hide: payment not
+        // yet recorded (402) and a failed render (410) need different actions.
+        if (res.status === 402) {
+          throw new Error(
+            "We couldn't confirm your purchase yet. If you just paid, give it a few seconds and refresh.",
+          );
+        }
+        if (res.status === 410) {
+          throw new Error('This track failed to render. Please create it again.');
+        }
+        throw new Error('Download failed. Please try again.');
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${track?.title || 'track'}.${track?.spec.format || 'wav'}`;
+      // Sanitize the title for use as a filename: titles can contain slashes,
+      // quotes, etc. that would break or mangle the saved file name.
+      const safeTitle = (track?.title || 'track').replace(/[^a-z0-9._-]+/gi, '_').slice(0, 80);
+      a.download = `${safeTitle}.${track?.spec.format || 'wav'}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      setError('Download failed. Please try again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Download failed. Please try again.');
     } finally {
       setDownloading(false);
     }
@@ -310,7 +330,10 @@ export default function TrackDetailPage() {
           // Transient — keep polling until the budget runs out.
         }
       }
-      if (!cancelled) setFinalizing(false);
+      if (!cancelled) {
+        setFinalizing(false);
+        setFinalizeTimedOut(true);
+      }
     })();
 
     return () => {
@@ -471,6 +494,24 @@ export default function TrackDetailPage() {
                 </Button>
                 <p className="text-xs text-muted">{`${track.spec.format.toUpperCase()} file, studio quality`}</p>
               </>
+            ) : finalizeTimedOut ? (
+              <>
+                <p className="text-sm text-[#1d1d1f] font-medium text-center">
+                  Payment received — we&apos;re still confirming it.
+                </p>
+                <p className="text-xs text-muted max-w-[380px] text-center">
+                  This usually only takes a few seconds. Refresh to check, and your
+                  download will start automatically once it&apos;s ready.
+                </p>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() => router.refresh()}
+                  className="min-w-[240px]"
+                >
+                  Refresh
+                </Button>
+              </>
             ) : (
               <>
                 <Button variant="primary" size="lg" onClick={handleCheckout} loading={downloading} className="min-w-[240px] glow-accent">
@@ -479,6 +520,27 @@ export default function TrackDetailPage() {
                 <p className="text-xs text-muted">One-time payment. No subscription required.</p>
               </>
             )}
+          </div>
+        )}
+
+        {track.status === 'failed' && (
+          <div className="flex flex-col items-center gap-3 pt-4 text-center">
+            <p className="text-sm text-[#1d1d1f] font-medium">
+              We couldn&apos;t finish rendering this track.
+            </p>
+            <p className="text-xs text-muted max-w-[420px]">
+              This is sometimes temporary. Try creating the track again — your
+              upload is quick to re-run. If it keeps failing, email{' '}
+              <a className="text-[#0066cc] hover:opacity-75" href="mailto:support@cuetrack.app">
+                support@cuetrack.app
+              </a>{' '}
+              and we&apos;ll take a look.
+            </p>
+            <a href="/create" className="mt-1">
+              <Button variant="primary" size="lg" className="min-w-[240px]">
+                Start a new track
+              </Button>
+            </a>
           </div>
         )}
       </main>
