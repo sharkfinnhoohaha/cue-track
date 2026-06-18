@@ -218,6 +218,10 @@ export default function TrackDetailPage() {
   const router = useRouter();
   const trackId = params.id as string;
   const isCheckoutSuccess = searchParams?.get('checkout') === 'success';
+  // Signed download token from the post-checkout redirect or the emailed link.
+  // Ties the download to the buyer instead of anyone who knows the track UUID.
+  const downloadToken = searchParams?.get('token') ?? null;
+  const tokenQuery = downloadToken ? `?token=${encodeURIComponent(downloadToken)}` : '';
   const [track, setTrack] = useState<TrackRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -232,10 +236,10 @@ export default function TrackDetailPage() {
   const [finalizeTimedOut, setFinalizeTimedOut] = useState(false);
 
   const fetchTrack = useCallback(async (): Promise<TrackRecord> => {
-    const res = await fetch(`/api/tracks/${trackId}`, { cache: 'no-store' });
+    const res = await fetch(`/api/tracks/${trackId}${tokenQuery}`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Track not found');
     return (await res.json()) as TrackRecord;
-  }, [trackId]);
+  }, [trackId, tokenQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,7 +273,7 @@ export default function TrackDetailPage() {
     setDownloading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/tracks/${trackId}/download`);
+      const res = await fetch(`/api/tracks/${trackId}/download${tokenQuery}`);
       if (!res.ok) {
         // Distinguish the cases a generic "try again" would hide: payment not
         // yet recorded (402) and a failed render (410) need different actions.
@@ -300,7 +304,7 @@ export default function TrackDetailPage() {
     } finally {
       setDownloading(false);
     }
-  }, [track?.title, track?.spec.format, trackId]);
+  }, [track?.title, track?.spec.format, trackId, tokenQuery]);
 
   // After returning from Stripe Checkout we land here with ?checkout=success
   // before the webhook has necessarily fired. Poll until hasAccess flips

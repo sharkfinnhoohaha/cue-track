@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { signDownloadToken } from '@/lib/download-token';
 import type { ApiError, PlanId } from '@/types';
 
 // Plan pricing is replicated here as a fallback when Stripe price IDs aren't
@@ -112,10 +113,17 @@ export async function POST(request: NextRequest) {
     const pricing = PRICES[planId];
     const origin = resolveOrigin(request);
 
+    // For single-track purchases, mint a short-lived download token into the
+    // success URL. Stripe only redirects there after payment succeeds, so the
+    // buyer can download immediately without waiting on the webhook — and
+    // without the track being downloadable by anyone who knows its UUID. The
+    // webhook emails a longer-lived token for durable re-downloads.
+    const successToken =
+      planId === 'single' && trackId ? signDownloadToken(trackId, 24 * 60 * 60) : null;
     const successUrl =
       planId === 'pro'
         ? `${origin}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`
-        : `${origin}/tracks/${trackId}?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+        : `${origin}/tracks/${trackId}?checkout=success&session_id={CHECKOUT_SESSION_ID}${successToken ? `&token=${successToken}` : ''}`;
     const cancelUrl =
       planId === 'pro'
         ? `${origin}/pricing?checkout=canceled`

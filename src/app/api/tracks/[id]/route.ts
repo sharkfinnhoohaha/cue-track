@@ -9,7 +9,7 @@ import { auth } from '@/auth';
 // ---------------------------------------------------------------------------
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } },
 ) {
   const { id } = params;
@@ -74,7 +74,11 @@ export async function GET(
     const track = rows[0];
     const session = await auth();
     const requesterId = session?.user?.id ?? null;
-    const hasAccess = await checkTrackAccess(id, requesterId);
+    const token = new URL(request.url).searchParams.get('token');
+    const hasAccess = await checkTrackAccess(id, requesterId, {
+      email: session?.user?.email ?? null,
+      token,
+    });
 
     // The track detail route is reachable by anyone with the UUID (the
     // share-to-buy "$3, no account" flow depends on it), so it must not leak

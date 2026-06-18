@@ -71,7 +71,11 @@ export async function GET(
   // --- Payment gate (skip for previews) --------------------------------
   if (!isPreview) {
     const session = await auth();
-    const allowed = await checkTrackAccess(id, session?.user?.id ?? null);
+    const token = searchParams.get('token');
+    const allowed = await checkTrackAccess(id, session?.user?.id ?? null, {
+      email: session?.user?.email ?? null,
+      token,
+    });
     if (!allowed) {
       return NextResponse.json(
         {

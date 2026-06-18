@@ -80,6 +80,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const { eq } = await import('drizzle-orm');
 
   if (plan === 'single' && trackId) {
+    let alreadyRecorded = false;
     try {
       await db.insert(purchases).values({
         trackId,
@@ -94,7 +95,31 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       // session re-inserts the same stripeSessionId (UNIQUE). That's a no-op,
       // not a failure — swallow it so we don't 500 and trigger endless retries.
       if (!isUniqueViolation(err)) throw err;
+      alreadyRecorded = true;
       console.info(`[stripe/webhook] Duplicate single-track delivery for session ${session.id}; already recorded`);
+    }
+
+    // Email the buyer a durable, signed download link so the file is tied to
+    // them (not to anyone with the track URL). Skipped on duplicate deliveries
+    // and best-effort: an email failure must not fail the webhook (which would
+    // trigger Stripe retries), so it's swallowed.
+    if (!alreadyRecorded && email) {
+      try {
+        const { signDownloadToken } = await import('@/lib/download-token');
+        const token = signDownloadToken(trackId, 30 * 24 * 60 * 60); // 30 days
+        if (token) {
+          const { eq } = await import('drizzle-orm');
+          const { tracks } = await import('@/lib/db');
+          const rows = await db.select({ title: tracks.title }).from(tracks).where(eq(tracks.id, trackId)).limit(1);
+          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cuetrack.app';
+          const base = /^https?:\/\//i.test(siteUrl) ? siteUrl : `https://${siteUrl}`;
+          const downloadUrl = `${base}/tracks/${trackId}?token=${token}`;
+          const { sendPurchaseEmail } = await import('@/lib/purchase-email');
+          await sendPurchaseEmail({ to: email, trackTitle: rows[0]?.title ?? 'your track', downloadUrl });
+        }
+      } catch (emailErr) {
+        console.error('[stripe/webhook] Failed to send purchase email (non-fatal):', emailErr);
+      }
     }
   } else if (plan === 'pro') {
     const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null;
