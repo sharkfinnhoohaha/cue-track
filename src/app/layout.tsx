@@ -8,10 +8,27 @@ import './globals.css';
 // relative OG/icon URLs resolve against the real domain in production instead
 // of defaulting to http://localhost:3000 (Next's fallback, which breaks social
 // cards). NEXT_PUBLIC_SITE_URL is the name used across robots/sitemap/Stripe.
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cuetrack.app';
+//
+// Everywhere else this var is consumed as a plain string, so a bare-host value
+// (e.g. "cue-track.vercel.app") has always been tolerated. metadataBase needs
+// a real URL, so resolve defensively: add a protocol if missing and fall back
+// to the default on any parse failure rather than throwing during the build.
+const DEFAULT_SITE_URL = 'https://cuetrack.app';
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? DEFAULT_SITE_URL;
+
+function resolveMetadataBase(raw: string): URL {
+  const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    return new URL(candidate);
+  } catch {
+    return new URL(DEFAULT_SITE_URL);
+  }
+}
+
+const RESOLVED_SITE_URL = resolveMetadataBase(SITE_URL);
 
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
+  metadataBase: RESOLVED_SITE_URL,
   title: {
     default: 'Cue Track — Click & Cue Tracks for Live Musicians',
     template: '%s | Cue Track',
@@ -35,7 +52,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: SITE_URL,
+    url: RESOLVED_SITE_URL.origin,
     siteName: 'Cue Track',
     title: 'Cue Track — Click & Cue Tracks for Live Musicians',
     description:
