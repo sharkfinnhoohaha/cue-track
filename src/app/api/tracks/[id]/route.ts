@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import type { ApiError, TrackRecord } from '@/types';
 import { checkTrackAccess } from '@/lib/payment-access';
+import { getClientIpHash } from '@/lib/rate-limit';
 import { auth } from '@/auth';
 
 // ---------------------------------------------------------------------------
@@ -86,6 +87,34 @@ export async function GET(
     // everyone else gets the renderable fields they need and nothing more.
     const isOwner = requesterId !== null && requesterId === track.userId;
 
+    // Whether the caller can still claim a free track (the "first one's on us"
+    // offer). Only meaningful when they don't already have access; computed
+    // against the same identifier scheme the claim endpoint enforces.
+    let freeEligible = false;
+    if (!hasAccess) {
+      const identifier = requesterId
+        ? `user:${requesterId}`
+        : (() => {
+            const h = getClientIpHash(request);
+            return h ? `ip:${h}` : null;
+          })();
+      if (identifier) {
+        try {
+          const { freeTrackClaims } = await import('@/lib/db');
+          const claims = await db
+            .select({ id: freeTrackClaims.id })
+            .from(freeTrackClaims)
+            .where(eq(freeTrackClaims.identifier, identifier))
+            .limit(1);
+          freeEligible = claims.length === 0;
+        } catch (err) {
+          // Table not migrated yet / DB blip — don't block the page, just hide
+          // the offer.
+          console.error('[tracks/[id]] free-eligibility check failed:', err);
+        }
+      }
+    }
+
     const record: TrackRecord = {
       id: track.id,
       title: track.title,
@@ -98,6 +127,7 @@ export async function GET(
       email: isOwner ? track.email : null,
       userId: isOwner ? track.userId : null,
       hasAccess,
+      freeEligible,
     };
 
     return NextResponse.json(record);

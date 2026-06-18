@@ -234,6 +234,12 @@ export default function TrackDetailPage() {
   // show "payment received, still processing" instead of silently reverting to
   // the buy button (which makes a paid buyer think they were never charged).
   const [finalizeTimedOut, setFinalizeTimedOut] = useState(false);
+  // Free-track ("first one's on us") claim state.
+  const [claimEmail, setClaimEmail] = useState('');
+  const [claimState, setClaimState] = useState<'idle' | 'submitting' | 'claimed'>('idle');
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [claimedEmail, setClaimedEmail] = useState<string | null>(null);
+  const [freeUsed, setFreeUsed] = useState(false);
 
   const fetchTrack = useCallback(async (): Promise<TrackRecord> => {
     const res = await fetch(`/api/tracks/${trackId}${tokenQuery}`, { cache: 'no-store' });
@@ -344,6 +350,51 @@ export default function TrackDetailPage() {
       cancelled = true;
     };
   }, [isCheckoutSuccess, track, fetchTrack, handleDownload]);
+
+  const handleClaimFree = useCallback(async () => {
+    setClaimError(null);
+    setClaimState('submitting');
+    try {
+      const res = await fetch(`/api/tracks/${trackId}/claim-free`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: claimEmail.trim() || undefined }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        token?: string;
+        email?: string;
+        error?: string;
+        details?: string;
+        code?: string;
+      };
+      if (!res.ok) {
+        if (res.status === 409 && data.code === 'FREE_TRACK_USED') setFreeUsed(true);
+        throw new Error(data.details || data.error || 'Could not claim your free track.');
+      }
+      setClaimedEmail(data.email ?? claimEmail.trim() ?? null);
+      setClaimState('claimed');
+      // Download immediately with the returned token.
+      if (data.token) {
+        const dl = await fetch(`/api/tracks/${trackId}/download?token=${encodeURIComponent(data.token)}`);
+        if (dl.ok) {
+          const blob = await dl.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const safeTitle = (track?.title || 'track').replace(/[^a-z0-9._-]+/gi, '_').slice(0, 80);
+          a.download = `${safeTitle}.${track?.spec.format || 'wav'}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+      }
+    } catch (err) {
+      setClaimState('idle');
+      setClaimError(err instanceof Error ? err.message : 'Could not claim your free track.');
+    }
+  }, [trackId, claimEmail, track?.title, track?.spec.format]);
 
   const handleCheckout = async () => {
     setDownloading(true);
@@ -516,6 +567,49 @@ export default function TrackDetailPage() {
                   Refresh
                 </Button>
               </>
+            ) : claimState === 'claimed' ? (
+              <>
+                <p className="text-sm text-[#1d1d1f] font-medium text-center">
+                  ✓ Your free cue track is downloading.
+                </p>
+                <p className="text-xs text-muted max-w-[380px] text-center">
+                  We also emailed the link{claimedEmail ? ` to ${claimedEmail}` : ''} so you can
+                  re-download it anytime.
+                </p>
+              </>
+            ) : track.freeEligible && !freeUsed ? (
+              <div className="flex w-full max-w-[420px] flex-col items-center gap-3">
+                <p className="text-sm font-medium text-[#1d1d1f] text-center">
+                  Your first cue track is on us — we&apos;ll email it to you free.
+                </p>
+                <input
+                  type="email"
+                  value={claimEmail}
+                  onChange={(e) => setClaimEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  aria-label="Email to send your free track to"
+                  className="input w-full text-center"
+                />
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={handleClaimFree}
+                  loading={claimState === 'submitting'}
+                  className="w-full glow-accent"
+                >
+                  Email me my free track
+                </Button>
+                {claimError && (
+                  <p className="text-xs text-red-600 font-mono text-center">{claimError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCheckout}
+                  className="text-xs text-muted underline hover:text-[#1d1d1f] transition-colors"
+                >
+                  Or buy just this track for $3
+                </button>
+              </div>
             ) : (
               <>
                 <Button variant="primary" size="lg" onClick={handleCheckout} loading={downloading} className="min-w-[240px] glow-accent">

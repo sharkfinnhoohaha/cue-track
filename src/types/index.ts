@@ -129,6 +129,11 @@ export interface TrackRecord {
    * subscription. Set by GET /api/tracks/[id]; omitted from list responses.
    */
   hasAccess?: boolean;
+  /**
+   * True when the caller can still claim their one free track (the "first one's
+   * on us" offer). Set by GET /api/tracks/[id]; false once they've used it.
+   */
+  freeEligible?: boolean;
 }
 
 export interface TracksListResponse {
