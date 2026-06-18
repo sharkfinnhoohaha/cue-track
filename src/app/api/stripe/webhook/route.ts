@@ -40,10 +40,32 @@ export async function POST(request: NextRequest) {
     }
   } catch (handlerErr) {
     console.error(`[stripe/webhook] Error handling ${event.type}:`, handlerErr);
-    return NextResponse.json({ received: true, handlerError: true });
+    // Return a 5xx so Stripe RETRIES the event. Previously this returned 200,
+    // which told Stripe the event was delivered — a transient DB error during
+    // an entitlement write then permanently lost the purchase with no retry
+    // (customer paid, got nothing). Duplicate re-deliveries are made safe by
+    // the idempotent handlers below, so retrying is the correct default.
+    return NextResponse.json(
+      { error: 'Webhook handler failed', received: false },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ received: true });
+}
+
+/**
+ * Postgres unique-violation SQLSTATE. A duplicate webhook delivery for a
+ * single-track purchase re-inserts the same stripeSessionId; treat that as
+ * "already processed" rather than an error so Stripe stops retrying.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code?: string }).code === '23505'
+  );
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
@@ -58,14 +80,22 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const { eq } = await import('drizzle-orm');
 
   if (plan === 'single' && trackId) {
-    await db.insert(purchases).values({
-      trackId,
-      stripeSessionId: session.id,
-      stripePaymentIntent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id ?? null,
-      status: 'paid',
-      email: email || 'unknown',
-      amountCents: session.amount_total ?? 300,
-    });
+    try {
+      await db.insert(purchases).values({
+        trackId,
+        stripeSessionId: session.id,
+        stripePaymentIntent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id ?? null,
+        status: 'paid',
+        email: email || 'unknown',
+        amountCents: session.amount_total ?? 300,
+      });
+    } catch (err) {
+      // Idempotency: a re-delivered checkout.session.completed for the same
+      // session re-inserts the same stripeSessionId (UNIQUE). That's a no-op,
+      // not a failure — swallow it so we don't 500 and trigger endless retries.
+      if (!isUniqueViolation(err)) throw err;
+      console.info(`[stripe/webhook] Duplicate single-track delivery for session ${session.id}; already recorded`);
+    }
   } else if (plan === 'pro') {
     const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null;
     const subscriptionId = typeof session.subscription === 'string' ? session.subscription : session.subscription?.id ?? null;

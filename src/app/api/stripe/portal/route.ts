@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { ApiError } from '@/types';
+import { auth } from '@/auth';
 
 export async function POST(request: NextRequest) {
-  let body: unknown;
-  try { body = await request.json(); } catch {
-    return NextResponse.json<ApiError>({ error: 'Invalid JSON in request body' }, { status: 400 });
+  // The Stripe customer is derived from the authenticated session, never from
+  // the request body. Trusting a client-supplied customerId would let any
+  // caller open another customer's billing portal (view invoices/payment
+  // methods, cancel their subscription) — an IDOR on billing data.
+  const session = await auth();
+  const customerId = session?.user?.stripeCustomerId ?? null;
+
+  if (!session?.user?.id) {
+    return NextResponse.json<ApiError>({ error: 'Authentication required' }, { status: 401 });
   }
 
-  if (!body || typeof body !== 'object') {
-    return NextResponse.json<ApiError>({ error: 'Request body must be a JSON object' }, { status: 400 });
-  }
-
-  const { customerId } = body as { customerId?: string };
-
-  if (!customerId || typeof customerId !== 'string') {
-    return NextResponse.json<ApiError>({ error: 'customerId is required' }, { status: 400 });
+  if (!customerId) {
+    return NextResponse.json<ApiError>(
+      { error: 'No billing account found for this user' },
+      { status: 404 },
+    );
   }
 
   if (!process.env.STRIPE_SECRET_KEY) {

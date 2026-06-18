@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import type { ApiError, TrackRecord } from '@/types';
 import { checkTrackAccess } from '@/lib/payment-access';
+import { auth } from '@/auth';
 
 // ---------------------------------------------------------------------------
 // GET /api/tracks/[id]
@@ -71,7 +72,15 @@ export async function GET(
     }
 
     const track = rows[0];
-    const hasAccess = await checkTrackAccess(id);
+    const session = await auth();
+    const requesterId = session?.user?.id ?? null;
+    const hasAccess = await checkTrackAccess(id, requesterId);
+
+    // The track detail route is reachable by anyone with the UUID (the
+    // share-to-buy "$3, no account" flow depends on it), so it must not leak
+    // the owner's identity. Only the authenticated owner sees email/userId;
+    // everyone else gets the renderable fields they need and nothing more.
+    const isOwner = requesterId !== null && requesterId === track.userId;
 
     const record: TrackRecord = {
       id: track.id,
@@ -82,8 +91,8 @@ export async function GET(
       fullUrl: track.fullUrl,
       duration: track.duration,
       createdAt: track.createdAt.toISOString(),
-      email: track.email,
-      userId: track.userId,
+      email: isOwner ? track.email : null,
+      userId: isOwner ? track.userId : null,
       hasAccess,
     };
 

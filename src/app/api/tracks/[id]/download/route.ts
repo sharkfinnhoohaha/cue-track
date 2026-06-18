@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import type { SongSpec } from '@/types';
 import { checkTrackAccess } from '@/lib/payment-access';
+import { auth } from '@/auth';
 
 export const maxDuration = 60;
 export const runtime = 'nodejs';
@@ -69,7 +70,8 @@ export async function GET(
 
   // --- Payment gate (skip for previews) --------------------------------
   if (!isPreview) {
-    const allowed = await checkTrackAccess(id);
+    const session = await auth();
+    const allowed = await checkTrackAccess(id, session?.user?.id ?? null);
     if (!allowed) {
       return NextResponse.json(
         {
