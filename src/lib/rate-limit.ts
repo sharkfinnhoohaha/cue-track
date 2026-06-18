@@ -77,8 +77,12 @@ function getLimitFor(kind: RateLimitKind): number {
 export async function checkAndRecordRateLimit(
   identifier: string,
   kind: RateLimitKind,
+  limitOverride?: number,
 ): Promise<RateLimitResult> {
-  const limit = getLimitFor(kind);
+  const limit =
+    typeof limitOverride === 'number' && limitOverride > 0
+      ? limitOverride
+      : getLimitFor(kind);
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
   try {
