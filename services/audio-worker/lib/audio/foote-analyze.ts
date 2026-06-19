@@ -30,13 +30,25 @@ import {
   type SuggestedSection,
 } from './analyze.ts';
 
-const FRAME_SIZE = 4096;
-const HOP_SIZE = 4096;
-const MEL_BANDS = 40;
-const MEL_FMIN = 80;
-const MEL_FMAX_RATIO = 0.5;
-const KERNEL_SIZE = 64;
-const PEAK_THRESHOLD_K = 3.0;
+// Detector parameters. Defaults are the tuned production values; each can be
+// overridden by an env var so the offline tuning loop (eval/sections/tune.ts)
+// can sweep the parameter space WITHOUT editing this file — a trial just sets
+// FOOTE_* and re-runs. Unset env = production behavior, so this is a no-op in
+// normal operation.
+function envNum(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+const FRAME_SIZE = envNum('FOOTE_FRAME_SIZE', 4096);
+const HOP_SIZE = envNum('FOOTE_HOP_SIZE', 4096);
+const MEL_BANDS = envNum('FOOTE_MEL_BANDS', 40);
+const MEL_FMIN = envNum('FOOTE_MEL_FMIN', 80);
+const MEL_FMAX_RATIO = envNum('FOOTE_MEL_FMAX_RATIO', 0.5);
+const KERNEL_SIZE = envNum('FOOTE_KERNEL_SIZE', 64);
+const PEAK_THRESHOLD_K = envNum('FOOTE_PEAK_THRESHOLD_K', 3.0);
 
 // --- FFT ---
 
@@ -378,7 +390,7 @@ function pickPeaks(
   const threshold = med + PEAK_THRESHOLD_K * mad;
   const secondsPerFrame = HOP_SIZE / sampleRate;
   const secondsPerBar = 240 / Math.max(bpm, 30);
-  const minGapBars = bpm < 85 ? 6 : 8;
+  const minGapBars = bpm < 85 ? envNum('FOOTE_MIN_GAP_BARS_SLOW', 6) : envNum('FOOTE_MIN_GAP_BARS_FAST', 8);
   let minGapSec = Math.max(12, minGapBars * secondsPerBar);
   const totalDuration = novelty.length * secondsPerFrame;
   if (totalDuration < 60) {
@@ -558,7 +570,7 @@ function sectionsFromBoundaries(
           const chromaSim = cosineSim(featI.avgChroma, featJ.avgChroma);
           const jointSim = 0.4 * melSim + 0.6 * chromaSim;
 
-          if (jointSim >= 0.82) {
+          if (jointSim >= envNum('FOOTE_CLUSTER_SIM_THRESHOLD', 0.82)) {
             clusterIds[j] = nextClusterId;
           }
         }

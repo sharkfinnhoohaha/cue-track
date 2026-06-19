@@ -76,6 +76,23 @@ export const purchases = pgTable('purchases', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// One free cue track per caller (the "first one's on us" onboarding offer).
+// `identifier` mirrors the rate_limit / upload_analyses scheme: `user:<id>`
+// for authed callers, `ip:<sha256(salt+ip)>` for anonymous ones. The UNIQUE
+// constraint on it is what enforces "one free track ever" — a second claim
+// from the same identifier hits the constraint and is rejected. Access to the
+// claimed track is granted by the emailed signed download token, not by this
+// row (so free claims never pollute the revenue-bearing `purchases` table).
+export const freeTrackClaims = pgTable('free_track_claims', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  identifier: text('identifier').notNull().unique(),
+  trackId: uuid('track_id')
+    .notNull()
+    .references(() => tracks.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: text('email').notNull().unique(),
@@ -343,6 +360,9 @@ export type NewTrack = typeof tracks.$inferInsert;
 
 export type Purchase = typeof purchases.$inferSelect;
 export type NewPurchase = typeof purchases.$inferInsert;
+
+export type FreeTrackClaim = typeof freeTrackClaims.$inferSelect;
+export type NewFreeTrackClaim = typeof freeTrackClaims.$inferInsert;
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;

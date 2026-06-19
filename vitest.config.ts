@@ -15,7 +15,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'eval/**/*.test.ts'],
     exclude: ['node_modules', '.next', 'services/audio-worker', 'scripts'],
     globals: false,
     pool: 'forks',
