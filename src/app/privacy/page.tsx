@@ -19,7 +19,7 @@ export default function PrivacyPage() {
     <>
       <Nav />
       <main className="mx-auto max-w-3xl px-6 pt-28 pb-20">
-        <h1 className="font-sans font-black tracking-[-0.035em] text-[#1d1d1f] text-[clamp(32px,4vw,48px)] mb-3">
+        <h1 className="font-display font-bold tracking-[-0.035em] text-[#1d1d1f] text-[clamp(32px,4vw,48px)] mb-3">
           Privacy Policy
         </h1>
         <p className="text-[13px] text-[#6e6e73] mb-12">Effective {EFFECTIVE_DATE}</p>

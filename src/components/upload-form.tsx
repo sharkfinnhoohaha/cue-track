@@ -331,7 +331,7 @@ export function UploadForm() {
           <p className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-3">
             You&apos;ve used your free analysis
           </p>
-          <h3 className="font-sans font-black tracking-[-0.03em] text-[#1d1d1f] mb-3 text-[clamp(22px,3vw,30px)]">
+          <h3 className="font-display font-bold tracking-[-0.03em] text-[#1d1d1f] mb-3 text-[clamp(22px,3vw,30px)]">
             Go Pro for unlimited analyses
           </h3>
           <p className="text-[14px] text-[#6e6e73] max-w-[460px] mx-auto mb-7 leading-[1.55]">

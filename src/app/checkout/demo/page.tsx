@@ -33,7 +33,7 @@ export default function DemoCheckoutPage({
           <p className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-3">
             Demo mode
           </p>
-          <h1 className="font-sans font-bold tracking-[-0.02em] text-[#1d1d1f] text-[22px] mb-3">
+          <h1 className="font-display font-bold tracking-[-0.02em] text-[#1d1d1f] text-[22px] mb-3">
             Payments aren&apos;t configured here
           </h1>
           <p className="text-[14px] text-[#6e6e73] leading-[1.6] mb-7">
