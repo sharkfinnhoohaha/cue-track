@@ -1,12 +1,18 @@
 /**
- * Run the Foote detector over a corpus split and grade it.
+ * Run a detector over a corpus split and grade it.
  *
+ *   # offline Foote detector (env-tunable, used by tune.ts):
  *   npx tsx eval/sections/run-eval.ts --corpus <dir> --split dev
  *
- * The detector runs in a subprocess (services/audio-worker/scripts/detect-
- * sections.ts) so the worker's audio deps resolve in their own package, and so
- * the tuning loop can hand each trial a fresh process with different FOOTE_*
- * env vars. This module exports `runDetector` + `scoreEntries` for tune.ts.
+ *   # a DEPLOYED worker (cloud-native — Foote OR allin1, no local deps):
+ *   npx tsx eval/sections/run-eval.ts --corpus <dir> --split dev --via http --detector ml
+ *
+ * The default runs the detector in a subprocess (services/audio-worker/scripts/
+ * detect-sections.ts) so the worker's audio deps resolve in their own package,
+ * and so the tuning loop can hand each trial a fresh process with different
+ * FOOTE_* env vars. With `--via http` it instead POSTs audio to a deployed
+ * worker, so the whole measurement is just HTTP + grading and needs no local
+ * deps. Exports `runDetector` + `scoreEntries` for tune.ts.
  *
  * Grading the `test` split is gated behind --allow-test so you can't casually
  * tune against it; the loop routes test through corpus.ts's TestSetGuard.
@@ -22,6 +28,7 @@ import {
   type SplitName,
 } from './corpus';
 import { sectionsToSegmentation, type DetectorOutput } from './convert';
+import { runDetectorHttp, resolveWorker } from './detector-http';
 import { gradeSong, aggregate, type SongScore, type AggregateScore } from './grade';
 
 const DETECT_CLI = 'services/audio-worker/scripts/detect-sections.ts';
@@ -80,12 +87,12 @@ function parseArgs(argv: string[]): Record<string, string> {
   return out;
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const corpusDir = args.corpus;
   const split = (args.split ?? 'dev') as SplitName;
   if (!corpusDir) {
-    console.error('Usage: tsx eval/sections/run-eval.ts --corpus <dir> --split dev|train|test');
+    console.error('Usage: tsx eval/sections/run-eval.ts --corpus <dir> --split dev|train|test [--via http --detector ml|foote]');
     process.exit(2);
   }
   if (split === 'test' && args['allow-test'] !== 'true') {
@@ -99,11 +106,21 @@ function main() {
     console.error(`No songs in the '${split}' split of ${corpusDir}.`);
     process.exit(1);
   }
-  console.error(`Running Foote over ${entries.length} '${split}' songs…`);
-  const { perSong, agg } = scoreEntries(entries, runDetector(entries));
+
+  const via = args.via ?? 'foote-cli';
+  let preds: Map<string, DetectorOutput>;
+  if (via === 'http') {
+    const which = (args.detector ?? 'ml') as 'foote' | 'ml';
+    console.error(`Scoring DEPLOYED '${which}' worker over ${entries.length} '${split}' songs…`);
+    preds = await runDetectorHttp(entries, resolveWorker(which));
+  } else {
+    console.error(`Running offline Foote over ${entries.length} '${split}' songs…`);
+    preds = runDetector(entries);
+  }
+  const { perSong, agg } = scoreEntries(entries, preds);
 
   const worst = [...perSong].sort((a, b) => a.score.perSection - b.score.perSection).slice(0, 10);
-  console.log(JSON.stringify({ split, aggregate: agg, worst10: worst }, null, 2));
+  console.log(JSON.stringify({ split, via, aggregate: agg, worst10: worst }, null, 2));
   console.error(
     `\nHeadline (per-section): ${(agg.headline * 100).toFixed(1)}%  ` +
       `| frame ${(agg.meanFrameAccuracy * 100).toFixed(1)}%  ` +
@@ -113,4 +130,9 @@ function main() {
   );
 }
 
-if (require.main === module) main();
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

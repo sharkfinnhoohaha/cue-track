@@ -8,6 +8,40 @@ The whole point is the grader can't be cheated. If `run-eval` / `tune` report
 90% on the held-out test set with clean guards, the detector genuinely is that
 accurate.
 
+> **This is dev tooling, not the product.** Cue Track stays a cloud web app —
+> the detectors run server-side (the Foote audio worker and the allin1 ML
+> worker, both on Cloud Run) serving users. Nothing here makes it a desktop
+> app. These scripts are how *we* measure and improve the detector offline.
+>
+> **Cloud vs local — your choice.** With `--via http` the measurement is just
+> HTTP calls to a deployed worker + grading, so it runs anywhere (a cloud
+> Claude session, CI, or your laptop) with **no local model or GPU**. Running
+> on your laptop is just the convenient place to keep the audio files; it does
+> not change what the product is.
+
+## Fastest path: measure allin1, route to it if it's there
+
+You very likely already have a strong detector — the **allin1 ML worker**. Before
+building anything, find out how accurate it actually is:
+
+```bash
+# Deploy the ML worker (services/ml-worker) so ML_WORKER_URL is reachable, then:
+ML_WORKER_URL=... ML_WORKER_SHARED_SECRET=... \
+  npx tsx eval/sections/run-eval.ts --corpus corpus --split test --allow-test \
+    --via http --detector ml
+```
+
+If allin1 clears 90% with clean guards, you're done: route traffic to it by
+setting `ANALYZE_AB_SPLIT_PERCENT=100` (the A/B router in
+`src/lib/analyze-router.ts`). The Foote-improvement loop below only matters if
+allin1 is too slow/costly and you need the *cheap* detector to hit 90% too.
+
+```bash
+# Compare the two detectors head to head on the same songs:
+npx tsx eval/sections/run-eval.ts --corpus corpus --split dev --via http --detector foote
+npx tsx eval/sections/run-eval.ts --corpus corpus --split dev --via http --detector ml
+```
+
 ---
 
 ## The anti-cheat contract
