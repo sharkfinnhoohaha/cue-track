@@ -47,12 +47,12 @@ export default function HomePage() {
 
       {/* ── Hero ── */}
       <div className="border-b border-black/[.08]">
-        <section className="px-6 pt-[112px] pb-20 text-center">
+        <section className="px-6 pt-[128px] pb-24 text-center">
           <p className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-6">
             Click &amp; cue tracks for live musicians
           </p>
 
-          <h1 className="font-sans font-black tracking-[-0.04em] leading-[1.0] text-[#1d1d1f] max-w-[860px] mx-auto mb-5 text-[clamp(44px,7vw,84px)]">
+          <h1 className="font-display font-bold tracking-[-0.025em] leading-[1.02] text-[#1d1d1f] max-w-[880px] mx-auto mb-5 text-[clamp(40px,6.4vw,76px)]">
             Analyze your track.<br />
             Get a cue-track back.
           </h1>
@@ -79,7 +79,7 @@ export default function HomePage() {
           <span className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-3 block">
             Or build manually
           </span>
-          <h2 className="font-sans font-black tracking-[-0.035em] text-[#1d1d1f] mb-3 text-[clamp(26px,3.2vw,38px)]">
+          <h2 className="font-display font-bold tracking-[-0.02em] text-[#1d1d1f] mb-3 text-[clamp(24px,3vw,36px)]">
             Know your BPM? Skip the upload.
           </h2>
           <p className="text-[15px] text-[#6e6e73] max-w-[480px] mx-auto leading-[1.6] mb-7">
@@ -101,7 +101,7 @@ export default function HomePage() {
           <span className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-3.5 block">
             How it works
           </span>
-          <h2 className="font-sans font-black tracking-[-0.035em] text-[#1d1d1f] mb-14 text-[clamp(28px,3.5vw,44px)]">
+          <h2 className="font-display font-bold tracking-[-0.02em] text-[#1d1d1f] mb-14 text-[clamp(26px,3.2vw,40px)]">
             Three steps to stage-ready.
           </h2>
 
@@ -127,7 +127,7 @@ export default function HomePage() {
           <span className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-3.5 block">
             Capabilities
           </span>
-          <h2 className="font-sans font-black tracking-[-0.035em] text-[#1d1d1f] mb-3 text-[clamp(28px,3.5vw,44px)]">
+          <h2 className="font-display font-bold tracking-[-0.02em] text-[#1d1d1f] mb-3 text-[clamp(26px,3.2vw,40px)]">
             Built for the stage.
           </h2>
           <p className="text-[17px] text-[#6e6e73] mb-14 max-w-[360px]">
@@ -156,7 +156,7 @@ export default function HomePage() {
           <span className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-3.5 block">
             Pricing
           </span>
-          <h2 className="font-sans font-black tracking-[-0.035em] text-[#1d1d1f] mb-3 text-[clamp(28px,3.5vw,44px)]">
+          <h2 className="font-display font-bold tracking-[-0.02em] text-[#1d1d1f] mb-3 text-[clamp(26px,3.2vw,40px)]">
             Simple, honest pricing.
           </h2>
           <p className="text-[17px] text-[#6e6e73] mb-14">No hidden fees.</p>
@@ -209,11 +209,12 @@ export default function HomePage() {
 
       {/* ── CTA ── */}
       <section className="px-6 py-[120px] text-center">
-        <h2 className="font-sans font-black tracking-[-0.04em] leading-[1.05] text-[#1d1d1f] max-w-[640px] mx-auto mb-5 text-[clamp(32px,4.5vw,56px)]">
-          Your band deserves better than a beeping metronome.
+        <h2 className="font-display font-bold tracking-[-0.025em] leading-[1.05] text-[#1d1d1f] max-w-[660px] mx-auto mb-5 text-[clamp(30px,4.2vw,52px)]">
+          Your cue track, ready in minutes.
         </h2>
-        <p className="text-[17px] text-[#6e6e73] max-w-[360px] mx-auto mb-9 leading-[1.55]">
-          Drop your track. Get a cue-track back.
+        <p className="text-[17px] text-[#6e6e73] max-w-[400px] mx-auto mb-9 leading-[1.55]">
+          Drop your track and skip the busywork — no DAW, no charting, no
+          fiddling with a metronome.
         </p>
         <Link
           href="/create"

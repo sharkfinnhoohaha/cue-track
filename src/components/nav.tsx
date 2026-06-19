@@ -56,10 +56,10 @@ export function Nav() {
         scrolled && 'bg-[#f5f5f7]/80 backdrop-blur-xl border-b border-black/[.08]',
       )}
     >
-      <nav className="max-w-[1080px] mx-auto px-6 h-[52px] flex items-center justify-between">
+      <nav className="max-w-[1080px] mx-auto px-6 h-[64px] flex items-center justify-between">
         <Link
           href="/"
-          className="font-mono text-[12px] font-medium tracking-[.1em] uppercase text-[#1d1d1f]"
+          className="font-mono text-[22px] font-semibold tracking-[.04em] uppercase text-[#1d1d1f] leading-none hover:opacity-70 transition-opacity"
         >
           Cue Track
         </Link>

@@ -2,16 +2,22 @@
  * Demo preview API route.
  * Returns a pre-rendered 15-second click/cue track preview for the landing page.
  * Renders on first request, then caches in memory.
+ *
+ * This goes through the SAME engine as a real user track (`renderPreviewOnly`),
+ * so the spoken section cues are produced by real Google Cloud TTS in
+ * production — not placeholder tones. Earlier this route synthesized its own
+ * sine-wave "beeps" for cues, which made the landing-page demo sound nothing
+ * like the actual product. Routing it through the engine keeps the demo honest:
+ * what a visitor hears here is exactly what they get.
  */
 
 import { NextResponse } from 'next/server';
-import { buildTimeGrid } from '@/lib/audio/grid';
-import { generateClick } from '@/lib/audio/click';
-import { mixTrack } from '@/lib/audio/mixer';
-import { encodeWav } from '@/lib/audio/encoder';
+import { renderPreviewOnly } from '@/lib/audio/engine';
 import type { SongSpec } from '@/types';
 
-// Demo spec: standard worship song structure
+// Demo spec: a standard worship-song structure. The 15s preview window
+// (taken from the front of the render) covers the count-in, the "Intro"
+// announcement, and the "Verse" cue — enough to showcase the voice.
 const DEMO_SPEC: SongSpec = {
   title: 'Demo Track',
   bpm: 120,
@@ -32,86 +38,29 @@ const DEMO_SPEC: SongSpec = {
   countInBars: 1,
 };
 
-const SAMPLE_RATE = 44100;
-const PREVIEW_SECONDS = 15;
-
-// In-memory cache for the demo preview
+// In-memory cache for the rendered demo preview. `inFlight` coalesces
+// concurrent first-hit requests so we render (and pay for TTS) only once.
 let cachedPreview: Buffer | null = null;
+let inFlight: Promise<Buffer> | null = null;
 
-/**
- * Simple fallback TTS: generate a tone burst as a cue marker.
- * Used when Google Cloud TTS credentials are not available.
- */
-function generateCueTone(text: string): Float32Array {
-  const duration = /^[1-9]$/.test(text.trim()) ? 0.1 : 0.2;
-  const baseFreq = 330;
-  const textHash = Array.from(text).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
-  const freqOffset = (Math.abs(textHash) % 5) * 40;
-  const freq = /^[1-9]$/.test(text.trim())
-    ? 660 + parseInt(text.trim(), 10) * 55
-    : baseFreq + freqOffset;
-
-  const numSamples = Math.round(SAMPLE_RATE * duration);
-  const buffer = new Float32Array(numSamples);
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / SAMPLE_RATE;
-    buffer[i] = 0.5 * Math.exp(-t / 0.06) * Math.sin(2 * Math.PI * freq * t);
+function getDemoPreview(): Promise<Buffer> {
+  if (cachedPreview) return Promise.resolve(cachedPreview);
+  if (!inFlight) {
+    inFlight = renderPreviewOnly(DEMO_SPEC)
+      .then((buf) => {
+        cachedPreview = buf;
+        return buf;
+      })
+      .finally(() => {
+        inFlight = null;
+      });
   }
-  return buffer;
-}
-
-function renderDemoPreview(): Buffer {
-  const grid = buildTimeGrid(DEMO_SPEC, SAMPLE_RATE);
-
-  const downbeatClick = generateClick('classic', true, SAMPLE_RATE);
-  const regularClick = generateClick('classic', false, SAMPLE_RATE);
-
-  // Generate fallback cue tones for all unique texts
-  const cueSamples = new Map<string, Float32Array>();
-  for (const cue of grid.cues) {
-    if (!cueSamples.has(cue.text)) {
-      cueSamples.set(cue.text, generateCueTone(cue.text));
-    }
-  }
-
-  const stereoBuffer = mixTrack({
-    grid,
-    clickSamples: { downbeat: downbeatClick, regular: regularClick },
-    cueSamples,
-    sampleRate: SAMPLE_RATE,
-    clickGainDb: 0,
-    cueGainDb: -6,
-  });
-
-  // Extract preview (first 15 seconds)
-  const previewFrames = Math.min(
-    Math.round(SAMPLE_RATE * PREVIEW_SECONDS),
-    Math.floor(stereoBuffer.length / 2)
-  );
-  const previewBuffer = new Float32Array(previewFrames * 2);
-  for (let i = 0; i < previewFrames * 2; i++) {
-    previewBuffer[i] = stereoBuffer[i];
-  }
-
-  // Apply 0.5s fade-out
-  const fadeOutFrames = Math.round(SAMPLE_RATE * 0.5);
-  const fadeStartFrame = previewFrames - fadeOutFrames;
-  if (fadeStartFrame > 0) {
-    for (let frame = fadeStartFrame; frame < previewFrames; frame++) {
-      const gain = 1.0 - (frame - fadeStartFrame) / fadeOutFrames;
-      previewBuffer[frame * 2] *= gain;
-      previewBuffer[frame * 2 + 1] *= gain;
-    }
-  }
-
-  return encodeWav(previewBuffer, SAMPLE_RATE, 2);
+  return inFlight;
 }
 
 export async function GET() {
   try {
-    if (!cachedPreview) {
-      cachedPreview = renderDemoPreview();
-    }
+    const preview = await getDemoPreview();
 
     // Cast buf.buffer to ArrayBuffer so the Uint8Array generic resolves to
     // Uint8Array<ArrayBuffer> (not Uint8Array<ArrayBufferLike>), which is
@@ -119,16 +68,16 @@ export async function GET() {
     // Node Buffer is always ArrayBuffer-backed at runtime (never
     // SharedArrayBuffer), so the cast is safe. View, no copy.
     const body = new Uint8Array(
-      cachedPreview.buffer as ArrayBuffer,
-      cachedPreview.byteOffset,
-      cachedPreview.byteLength,
+      preview.buffer as ArrayBuffer,
+      preview.byteOffset,
+      preview.byteLength,
     );
 
     return new NextResponse(body, {
       status: 200,
       headers: {
         'Content-Type': 'audio/wav',
-        'Content-Length': cachedPreview.length.toString(),
+        'Content-Length': preview.length.toString(),
         'Cache-Control': 'public, max-age=86400, immutable',
         'Content-Disposition': 'inline; filename="cue-track-demo.wav"',
       },

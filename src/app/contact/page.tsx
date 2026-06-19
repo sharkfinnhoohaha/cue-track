@@ -14,7 +14,7 @@ export default function ContactPage() {
     <>
       <Nav />
       <main className="mx-auto max-w-2xl px-6 pt-28 pb-20">
-        <h1 className="font-sans font-black tracking-[-0.035em] text-[#1d1d1f] text-[clamp(32px,4vw,48px)] mb-4">
+        <h1 className="font-display font-bold tracking-[-0.035em] text-[#1d1d1f] text-[clamp(32px,4vw,48px)] mb-4">
           Contact us
         </h1>
         <p className="text-[16px] leading-[1.7] text-[#3a3a3c] mb-8">

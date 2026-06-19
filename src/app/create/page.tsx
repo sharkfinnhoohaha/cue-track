@@ -33,7 +33,7 @@ export default async function CreatePage({
           <p className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-3">
             Create a cue track
           </p>
-          <h1 className="font-sans font-black tracking-[-0.035em] text-[#1d1d1f] mb-3 text-[clamp(30px,4vw,46px)]">
+          <h1 className="font-display font-bold tracking-[-0.035em] text-[#1d1d1f] mb-3 text-[clamp(30px,4vw,46px)]">
             Upload your song. We&apos;ll do the rest.
           </h1>
           <p className="text-[15px] text-[#6e6e73] max-w-[520px] mx-auto leading-[1.55]">
