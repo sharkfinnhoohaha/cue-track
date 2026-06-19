@@ -29,6 +29,8 @@ import {
 } from './corpus';
 import { sectionsToSegmentation, type DetectorOutput } from './convert';
 import { runDetectorHttp, resolveWorker } from './detector-http';
+import { checkStructure, type StructureReport } from './structure-checks';
+import { applyStructuralConstraints } from './structure-postprocess';
 import { gradeSong, aggregate, type SongScore, type AggregateScore } from './grade';
 
 const DETECT_CLI = 'services/audio-worker/scripts/detect-sections.ts';
@@ -57,18 +59,38 @@ export function runDetector(
   return new Map(Object.entries(raw));
 }
 
+export interface ScoreOptions {
+  /** apply the conservative structural constraints before grading (A/B test) */
+  postprocess?: boolean;
+  minSectionSec?: number;
+}
+
+export interface ScoredSong {
+  id: string;
+  score: SongScore;
+  /** structural plausibility — a sanity signal, NOT part of the accuracy score */
+  structure: StructureReport;
+}
+
 /** Grade detector outputs against each entry's reference labels. */
 export function scoreEntries(
   entries: CorpusEntry[],
   preds: Map<string, DetectorOutput>,
-): { perSong: { id: string; score: SongScore }[]; agg: AggregateScore } {
-  const perSong = entries
+  opts: ScoreOptions = {},
+): { perSong: ScoredSong[]; agg: AggregateScore; implausibleFraction: number } {
+  const perSong: ScoredSong[] = entries
     .filter((e) => preds.has(e.id))
     .map((e) => {
-      const pred = sectionsToSegmentation(preds.get(e.id)!);
-      return { id: e.id, score: gradeSong(e.ref, pred) };
+      let pred = sectionsToSegmentation(preds.get(e.id)!);
+      if (opts.postprocess) {
+        pred = applyStructuralConstraints(pred, { minSectionSec: opts.minSectionSec });
+      }
+      return { id: e.id, score: gradeSong(e.ref, pred), structure: checkStructure(pred) };
     });
-  return { perSong, agg: aggregate(perSong.map((p) => p.score)) };
+  const implausibleFraction = perSong.length
+    ? perSong.filter((p) => !p.structure.plausible).length / perSong.length
+    : 0;
+  return { perSong, agg: aggregate(perSong.map((p) => p.score)), implausibleFraction };
 }
 
 /** Convenience: detect + score a split in one call (used by the tuner for dev). */
@@ -117,15 +139,27 @@ async function main() {
     console.error(`Running offline Foote over ${entries.length} '${split}' songs…`);
     preds = runDetector(entries);
   }
-  const { perSong, agg } = scoreEntries(entries, preds);
+  const postprocess = args.postprocess === 'true';
+  const minSectionSec = args['min-section'] ? Number(args['min-section']) : undefined;
+  const { perSong, agg, implausibleFraction } = scoreEntries(entries, preds, { postprocess, minSectionSec });
 
+  // Surface the structurally-implausible songs first — these are the "7 verses"
+  // class of error you can act on without any labels.
+  const implausible = perSong
+    .filter((p) => !p.structure.plausible)
+    .map((p) => ({
+      id: p.id,
+      issues: p.structure.issues.filter((i) => i.severity === 'high').map((i) => i.message),
+    }));
   const worst = [...perSong].sort((a, b) => a.score.perSection - b.score.perSection).slice(0, 10);
-  console.log(JSON.stringify({ split, via, aggregate: agg, worst10: worst }, null, 2));
+  console.log(
+    JSON.stringify({ split, via, postprocess, aggregate: agg, implausibleFraction, implausible, worst10: worst }, null, 2),
+  );
   console.error(
     `\nHeadline (per-section): ${(agg.headline * 100).toFixed(1)}%  ` +
       `| frame ${(agg.meanFrameAccuracy * 100).toFixed(1)}%  ` +
       `| boundaryF@3s ${(agg.meanBoundaryF3 * 100).toFixed(1)}%  ` +
-      `| flagged ${(agg.flaggedFraction * 100).toFixed(0)}%  ` +
+      `| implausible ${(implausibleFraction * 100).toFixed(0)}%  ` +
       `| meetsTarget(${agg.target}): ${agg.meetsTarget}`,
   );
 }
