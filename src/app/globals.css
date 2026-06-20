@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..800;1,400..800&family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -8,17 +8,17 @@
 
 @layer base {
   :root {
+    --color-bg: #000000; /* pure black */
     --font-inter: Inter;
     --font-jetbrains: "JetBrains Mono";
-    --color-bg: #09090b; /* zinc-950 */
-    --color-surface: #18181b; /* zinc-900 */
-    --color-surface-raised: #27272a; /* zinc-800 */
-    --color-border: rgba(255, 255, 255, 0.08);
-    --color-border-strong: rgba(255, 255, 255, 0.15);
-    --color-text: #fafafa; /* zinc-50 */
-    --color-muted: #a1a1aa; /* zinc-400 */
-    --color-dim: #52525b; /* zinc-600 */
-    --color-accent: #4A9D97; /* Pacific teal */
+    --color-surface: #0a0a0c; /* subtle dark gray */
+    --color-surface-raised: #121214; /* raised panel */
+    --color-border: rgba(255, 255, 255, 0.08); /* crisp light line */
+    --color-border-strong: rgba(255, 255, 255, 0.16);
+    --color-text: #f5f5f7; /* Apple white */
+    --color-muted: #86868b; /* Apple muted gray */
+    --color-dim: #424245; /* dark line */
+    --color-accent: #e11d48; /* refined red */
   }
 
   html {
@@ -41,7 +41,7 @@
   *:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
-    border-radius: 3px;
+    border-radius: 6px;
   }
 
   *:focus:not(:focus-visible) {
@@ -49,7 +49,7 @@
   }
 
   ::selection {
-    background-color: rgba(74, 157, 151, 0.25);
+    background-color: rgba(225, 29, 72, 0.25);
     color: var(--color-text);
   }
 }
@@ -65,15 +65,15 @@
     background: var(--color-bg);
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.1);
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.24);
+    background: rgba(255, 255, 255, 0.2);
   }
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.12) var(--color-bg);
+    scrollbar-color: rgba(255, 255, 255, 0.1) var(--color-bg);
   }
 }
 
@@ -81,71 +81,71 @@
 
 @layer components {
   .card {
-    @apply bg-surface-raised border border-surface-border rounded-[14px];
+    @apply bg-surface-raised border border-surface-border rounded-2xl;
   }
 
   .card-elevated {
-    @apply bg-surface-raised border border-surface-border rounded-[14px] shadow-lg shadow-black/20;
+    @apply bg-surface-raised border border-surface-border rounded-2xl shadow-xl shadow-black/40;
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 font-medium transition-all duration-150
+    @apply inline-flex items-center justify-center gap-2 font-sans text-xs font-semibold tracking-normal rounded-full transition-all duration-200
            disabled:opacity-50 disabled:cursor-not-allowed
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090b];
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black;
   }
 
   .btn-primary {
-    @apply btn bg-accent text-zinc-950 rounded-full px-7 py-3 text-[15px] font-semibold hover:opacity-90 active:scale-[0.98];
+    @apply btn bg-white text-black px-6 py-2.5 hover:bg-zinc-200 active:scale-[0.98];
   }
 
   .btn-secondary {
-    @apply btn bg-surface-raised border border-surface-border text-zinc-100 rounded-lg px-4 py-2 text-sm hover:bg-white/[.04] active:scale-[0.98];
+    @apply btn bg-surface-raised border border-surface-border text-white px-5 py-2 hover:bg-white/[.04] active:scale-[0.98];
   }
 
   .btn-ghost {
-    @apply btn text-zinc-400 hover:text-zinc-100 px-3 py-2 text-sm rounded-lg hover:bg-white/[.04];
+    @apply btn text-zinc-400 hover:text-white px-4 py-2 hover:bg-white/[.04];
   }
 
   .btn-outline {
-    @apply btn border border-surface-border text-zinc-100 rounded-lg px-4 py-2 text-sm hover:border-zinc-400 active:scale-[0.98];
+    @apply btn border border-surface-border text-white px-5 py-2 hover:border-zinc-400 active:scale-[0.98];
   }
 
   .btn-danger {
-    @apply btn bg-red-950/20 text-red-400 border border-red-900/30 rounded-lg px-4 py-2 text-sm hover:bg-red-900/30;
+    @apply btn bg-red-950/20 text-red-400 border border-red-900/30 rounded-full px-5 py-2 hover:bg-red-900/30;
   }
 
   .input {
-    @apply w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-zinc-100
+    @apply w-full rounded-xl border border-surface-border bg-surface-raised px-4 py-2.5 text-sm text-white
            placeholder:text-zinc-500 transition-colors
-           focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20;
+           focus:border-white/40 focus:outline-none focus:ring-0;
   }
 
   .input-error {
-    @apply border-red-500/50 focus:border-red-500 focus:ring-red-500/20;
+    @apply border-red-500/50 focus:border-red-500;
   }
 
   .label {
-    @apply block text-sm font-medium text-zinc-300 mb-1.5;
+    @apply block text-[11px] font-mono tracking-wider uppercase text-zinc-400 mb-1.5;
   }
 
   .badge {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-mono tracking-wider uppercase font-semibold border;
   }
 
   .badge-accent {
-    @apply badge bg-accent/10 text-accent border border-accent/20;
+    @apply badge bg-accent/10 text-accent border-accent/20;
   }
 
   .badge-muted {
-    @apply badge bg-white/[.06] text-zinc-400 border border-white/[.04];
+    @apply badge bg-white/[.04] text-zinc-400 border-white/[.08];
   }
 
   .badge-green {
-    @apply badge bg-emerald-500/10 text-emerald-400 border border-emerald-500/20;
+    @apply badge bg-emerald-500/10 text-emerald-400 border-emerald-500/20;
   }
 
   .badge-red {
-    @apply badge bg-red-500/10 text-red-400 border border-red-500/20;
+    @apply badge bg-red-500/10 text-red-400 border-red-500/20;
   }
 
   .divider {
@@ -153,11 +153,11 @@
   }
 
   .section-title {
-    @apply text-3xl font-bold tracking-tight text-zinc-100;
+    @apply font-sans font-bold tracking-tight text-white text-2xl sm:text-3xl;
   }
 
   .section-subtitle {
-    @apply text-zinc-400 text-base leading-relaxed;
+    @apply text-zinc-400 text-sm leading-relaxed mt-1.5;
   }
 
   .mono {
@@ -167,7 +167,7 @@
   /* Loading-placeholder fill. Used by the dashboard and track-detail loading
      states (the parent carries `animate-pulse`). */
   .skeleton {
-    @apply bg-white/[.06] rounded;
+    @apply bg-white/[.06] rounded-xl;
   }
 
   .scrollbar-hidden {
@@ -188,9 +188,8 @@
   }
 
   /* Subtle accent halo for primary CTAs. */
+  /* Minimal border design instead of tech shadow halos. */
   .glow-accent {
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.4),
-      0 12px 30px -12px rgba(74, 157, 151, 0.3);
+    @apply border border-accent/40;
   }
 }

@@ -100,7 +100,7 @@ function WaveformCanvas({
       const y = (h - barH) / 2;
       const isPlayed = i / barCount <= progress;
 
-      ctx.fillStyle = isPlayed ? '#4A9D97' : '#3f3f46';
+      ctx.fillStyle = isPlayed ? '#e11d48' : '#27272a';
       ctx.fillRect(x + gap / 2, y, Math.max(1, barWidth - gap), barH);
     }
   }, [currentTime, duration]);
@@ -182,7 +182,7 @@ function AudioPlayer({ src }: { src: string }) {
         <button
           type="button"
           onClick={togglePlay}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-accent text-surface hover:bg-accent-300 transition-colors"
+          className="flex h-10 w-10 items-center justify-center rounded-none bg-white text-black hover:bg-zinc-200 transition-colors"
           aria-label={isPlaying ? 'Pause' : 'Play'}
         >
           {isPlaying ? (
@@ -446,8 +446,8 @@ export default function TrackDetailPage() {
         <Nav />
         <main className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
           <div className="text-center py-20">
-            <h1 className="font-display text-3xl font-semibold text-zinc-100 mb-3">Track Not Found</h1>
-            <p className="text-muted mb-6">{error || 'The track you are looking for does not exist.'}</p>
+            <h1 className="font-sans font-black uppercase tracking-tight text-white text-2xl mb-3">Track Not Found</h1>
+            <p className="text-xs font-mono tracking-wide text-zinc-400 mb-6">{error || 'The track you are looking for does not exist.'}</p>
             <a href="/create"><Button variant="primary">Create a New Track</Button></a>
           </div>
         </main>
@@ -489,10 +489,10 @@ export default function TrackDetailPage() {
               {track.status === 'ready' && 'Ready'}
               {track.status === 'failed' && 'Failed'}
             </span>
-            <span className="badge badge-muted font-mono uppercase">{track.spec.format}</span>
+            <span className="badge badge-muted">{track.spec.format}</span>
           </div>
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-zinc-100 sm:text-5xl">{track.title}</h1>
-          <p className="mt-2 text-sm text-muted">Created {createdDate}</p>
+          <h1 className="font-sans font-extrabold tracking-tight text-white text-3xl sm:text-4xl">{track.title}</h1>
+          <p className="mt-2 text-xs font-sans text-zinc-500">Created {createdDate}</p>
         </div>
 
         {track.previewUrl && track.status === 'ready' && (
@@ -500,25 +500,25 @@ export default function TrackDetailPage() {
         )}
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">BPM</p><p className="font-mono text-2xl font-bold text-zinc-100 mt-1">{track.spec.bpm}</p></div></Card>
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Time Sig</p><p className="font-mono text-2xl font-bold text-zinc-100 mt-1">{tsLabel}</p></div></Card>
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Sections</p><p className="font-mono text-2xl font-bold text-zinc-100 mt-1">{track.spec.sections.length}</p></div></Card>
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Duration</p><p className="font-mono text-2xl font-bold text-zinc-100 mt-1">{track.duration ? `${Math.floor(track.duration / 60)}:${String(Math.floor(track.duration % 60)).padStart(2, '0')}` : '--:--'}</p></div></Card>
+          <Card><div className="text-center"><p className="font-sans text-xs font-semibold text-zinc-500">BPM</p><p className="font-mono text-2xl font-bold text-white mt-1">{track.spec.bpm}</p></div></Card>
+          <Card><div className="text-center"><p className="font-sans text-xs font-semibold text-zinc-500">Time Sig</p><p className="font-mono text-2xl font-bold text-white mt-1">{tsLabel}</p></div></Card>
+          <Card><div className="text-center"><p className="font-sans text-xs font-semibold text-zinc-500">Sections</p><p className="font-mono text-2xl font-bold text-white mt-1">{track.spec.sections.length}</p></div></Card>
+          <Card><div className="text-center"><p className="font-sans text-xs font-semibold text-zinc-500">Duration</p><p className="font-mono text-2xl font-bold text-white mt-1">{track.duration ? `${Math.floor(track.duration / 60)}:${String(Math.floor(track.duration % 60)).padStart(2, '0')}` : '--:--'}</p></div></Card>
         </div>
 
         <Card header="Section Breakdown" className="mb-8">
           <div className="space-y-2">
             {track.spec.sections.map((section, i) => (
-              <div key={section.id || i} className="flex items-center justify-between rounded-lg bg-zinc-950/50 px-4 py-2.5 border border-surface-border">
+              <div key={section.id || i} className="flex items-center justify-between rounded-xl bg-zinc-900/10 px-4 py-3 border border-surface-border">
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-muted w-6 text-center">{i + 1}</span>
-                  <span className="text-sm font-medium text-zinc-100">{section.name}</span>
+                  <span className="font-mono text-xs text-zinc-500 w-6 text-center">{i + 1}</span>
+                  <span className="text-sm font-sans font-semibold text-white">{section.name}</span>
                 </div>
-                <span className="font-mono text-xs text-muted">{section.bars} bars</span>
+                <span className="font-mono text-xs text-zinc-500">{section.bars} bars</span>
               </div>
             ))}
-            <div className="flex justify-end pt-2 border-t border-surface-border mt-3">
-              <span className="font-mono text-xs text-muted">Total: {totalBars} bars</span>
+            <div className="flex justify-end pt-3 border-t border-surface-border mt-3">
+              <span className="font-mono text-xs text-zinc-500">Total: {totalBars} bars</span>
             </div>
           </div>
         </Card>
@@ -540,14 +540,14 @@ export default function TrackDetailPage() {
               </>
             ) : isPaid ? (
               <>
-                <Button variant="primary" size="lg" onClick={handleDownload} loading={downloading} className="min-w-[240px] glow-accent">
+                <Button variant="primary" size="lg" onClick={handleDownload} loading={downloading} className="min-w-[240px]">
                   <svg className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
                     <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
                   </svg>
                   Download Full Track
                 </Button>
-                <p className="text-xs text-muted">{`${track.spec.format.toUpperCase()} file, studio quality`}</p>
+                <p className="text-xs font-mono tracking-wider uppercase text-muted">{`${track.spec.format.toUpperCase()} file, studio quality`}</p>
               </>
             ) : finalizeTimedOut ? (
               <>

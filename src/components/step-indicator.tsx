@@ -14,37 +14,37 @@ const STEPS = ['Upload', 'Review', 'Download'] as const;
 
 export function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
   return (
-    <ol className="flex items-center justify-center gap-1.5 sm:gap-3">
+    <ol className="flex items-center justify-center gap-1.5 sm:gap-4">
       {STEPS.map((label, i) => {
         const step = i + 1;
         const isActive = step === current;
         const isDone = step < current;
         return (
-          <li key={label} className="flex items-center gap-1.5 sm:gap-3">
+          <li key={label} className="flex items-center gap-1.5 sm:gap-4">
             <span className="flex items-center gap-2">
               <span
                 className={cn(
-                  'flex h-6 w-6 items-center justify-center rounded-full font-mono text-[11px] font-medium',
+                  'flex h-6 w-6 items-center justify-center rounded-full font-sans text-xs font-bold',
                   isActive
-                    ? 'bg-accent text-zinc-950 font-bold'
+                    ? 'bg-accent text-white'
                     : isDone
-                      ? 'bg-accent/80 text-zinc-950 font-bold'
-                      : 'bg-black/[.06] text-zinc-400',
+                      ? 'bg-white text-black'
+                      : 'bg-white/10 text-zinc-500',
                 )}
               >
                 {isDone ? '✓' : step}
               </span>
               <span
                 className={cn(
-                  'text-[12px] font-medium',
-                  isActive ? 'text-zinc-100' : 'text-zinc-400',
+                  'text-xs font-sans font-medium tracking-wide',
+                  isActive ? 'text-white font-semibold' : 'text-zinc-500',
                 )}
               >
                 {label}
               </span>
             </span>
             {step < STEPS.length && (
-              <span aria-hidden="true" className="h-px w-5 sm:w-8 bg-black/[.12]" />
+              <span aria-hidden="true" className="h-px w-5 sm:w-10 bg-white/20" />
             )}
           </li>
         );

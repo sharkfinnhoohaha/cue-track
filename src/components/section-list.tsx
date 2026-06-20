@@ -88,7 +88,7 @@ export function SectionList({ sections, onChange }: SectionListProps) {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, index)}
             onDragEnd={handleDragEnd}
-            className={cn('group flex items-center gap-3 rounded-lg border bg-surface-raised px-3 py-2.5 transition-colors', overIndex === index && dragIndex !== index ? 'border-accent/50 bg-accent/5' : 'border-surface-border', dragIndex === index && 'opacity-40')}
+            className={cn('group flex items-center gap-3 rounded-xl border bg-surface-raised px-3 py-2.5 transition-colors', overIndex === index && dragIndex !== index ? 'border-accent/50 bg-accent/5' : 'border-surface-border', dragIndex === index && 'opacity-40')}
           >
             <div className="flex cursor-grab items-center text-muted hover:text-zinc-100 active:cursor-grabbing">
               <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-label="Drag to reorder">
@@ -101,20 +101,20 @@ export function SectionList({ sections, onChange }: SectionListProps) {
               <input type="number" value={section.bars} onChange={(e) => { const val = parseInt(e.target.value, 10); if (!isNaN(val)) updateSection(index, { bars: val }); }} onBlur={(e) => { const val = parseInt(e.target.value, 10); updateSection(index, { bars: isNaN(val) ? 1 : Math.min(99, Math.max(1, val)) }); }} min={1} max={99} className="input w-16 text-center font-mono" aria-label={`Section ${index + 1} bar count`} />
               <span className="font-mono text-xs text-muted">bars</span>
             </div>
-            <button type="button" onClick={() => removeSection(index)} className="flex-shrink-0 rounded-md p-1.5 text-muted hover:bg-red-50 hover:text-red-600 transition-colors" aria-label={`Delete section ${section.name}`}>
+            <button type="button" onClick={() => removeSection(index)} className="flex-shrink-0 rounded-full p-1.5 text-muted hover:bg-red-950/25 hover:text-red-400 transition-colors" aria-label={`Delete section ${section.name}`}>
               <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" /></svg>
             </button>
           </div>
         ))}
       </div>
       {sections.length === 0 && (
-        <div className="rounded-lg border border-dashed border-surface-border px-6 py-8 text-center">
-          <p className="text-sm text-muted mb-3">No sections yet. Add sections to define your song structure.</p>
+        <div className="rounded-2xl border border-dashed border-surface-border px-6 py-8 text-center">
+          <p className="text-xs font-sans text-zinc-500 mb-3 font-normal">No sections yet. Add sections to define your song structure.</p>
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {PRESETS.map((preset) => (
-          <button key={preset.name} type="button" onClick={() => addSection(preset.name, preset.name === 'Intro' || preset.name === 'Outro' ? 4 : 8)} className="inline-flex items-center gap-1 rounded-md border border-surface-border px-2.5 py-1 text-xs font-mono text-muted hover:border-accent/40 hover:text-accent transition-colors">
+          <button key={preset.name} type="button" onClick={() => addSection(preset.name, preset.name === 'Intro' || preset.name === 'Outro' ? 4 : 8)} className="inline-flex items-center gap-1 rounded-full border border-surface-border bg-zinc-900/10 px-3 py-1 text-xs font-sans text-zinc-400 hover:border-accent/40 hover:text-accent transition-colors">
             <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" /></svg>
             {preset.label}
           </button>

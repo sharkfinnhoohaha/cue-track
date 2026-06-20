@@ -11,35 +11,30 @@ const config: Config = {
     extend: {
       colors: {
         accent: {
-          DEFAULT: '#4A9D97',
-          50:  '#f0fdfa',
-          100: '#ccfbf1',
-          200: '#99f6e4',
-          300: '#5eead4',
-          400: '#2dd4bf',
-          500: '#4a9d97',
-          600: '#0d9488',
-          700: '#0f766e',
-          800: '#115e59',
-          900: '#134e4a',
+          DEFAULT: '#d92635',
+          50:  '#fff1f2',
+          100: '#ffe4e6',
+          200: '#fecdd3',
+          300: '#fda4af',
+          400: '#fb7185',
+          500: '#f43f5e',
+          600: '#d92635',
+          700: '#be123c',
+          800: '#9f1239',
+          900: '#881337',
         },
         surface: {
-          DEFAULT: '#09090b',
-          raised:  '#18181b',
+          DEFAULT: '#000000',
+          raised:  '#121214',
           border:  'rgba(255, 255, 255, 0.08)',
         },
-        muted: '#a1a1aa',
+        muted: '#86868b',
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         mono: ['var(--font-jetbrains)', 'JetBrains Mono', 'Menlo', 'monospace'],
-        // Heading / display font. `font-display` is the single heading token
-        // across the app (landing, auth, pricing, dashboard, articles). It maps
-        // to JetBrains Mono — the same typeface as the "Cue Track" wordmark — so
-        // headings carry the brand's monospace DNA while body copy stays Inter
-        // (`font-sans`). Change this one line to re-skin every heading at once.
-        display: ['var(--font-jetbrains)', 'JetBrains Mono', 'Menlo', 'monospace'],
-        // legacy alias — components that reference font-body will use Inter
+        serif: ['"EB Garamond"', 'Georgia', 'serif'],
+        display: ['var(--font-inter)', 'Inter', '-apple-system', 'sans-serif'],
         body: ['var(--font-inter)', 'Inter', '-apple-system', 'sans-serif'],
       },
       animation: {

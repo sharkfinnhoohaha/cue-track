@@ -362,7 +362,7 @@ export function TrackForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 animate-fade-in">{error}</div>
+        <div className="rounded-xl border border-red-500/20 bg-red-950/10 px-4 py-3 text-xs font-sans text-red-400 animate-fade-in">{error}</div>
       )}
 
       <Card header="Track Details">
@@ -409,20 +409,20 @@ export function TrackForm({
           </div>
           <div>
             <label className="label font-mono text-xs uppercase tracking-wider">Click Sound</label>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {CLICK_SOUNDS.map((sound) => (
-                <button key={sound.id} type="button" onClick={() => update('clickSound', sound.id)} className={cn('rounded-lg border px-3 py-2.5 text-left transition-all', spec.clickSound === sound.id ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border bg-surface hover:border-white/30 text-muted hover:text-zinc-100')}>
-                  <span className="block text-sm font-medium">{sound.label}</span>
-                  <span className="block text-xs text-muted mt-0.5">{sound.desc}</span>
+                <button key={sound.id} type="button" onClick={() => update('clickSound', sound.id)} className={cn('rounded-xl border px-4 py-3 text-left transition-all duration-200', spec.clickSound === sound.id ? 'border-accent bg-accent/5 text-accent font-semibold' : 'border-surface-border bg-zinc-900/10 hover:border-white/20 text-zinc-400 hover:text-white')}>
+                  <span className="block text-xs font-sans font-bold">{sound.label}</span>
+                  <span className="block text-[10px] text-zinc-500 mt-0.5 font-normal">{sound.desc}</span>
                 </button>
               ))}
             </div>
           </div>
           <div>
             <label className="label font-mono text-xs uppercase tracking-wider">Output Format</label>
-            <div className="flex gap-2">
+            <div className="flex gap-2.5">
               {FORMAT_OPTIONS.map((fmt) => (
-                <button key={fmt.id} type="button" onClick={() => update('format', fmt.id)} className={cn('rounded-lg border px-5 py-2 font-mono text-sm font-medium transition-all', spec.format === fmt.id ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border text-muted hover:text-zinc-100')}>
+                <button key={fmt.id} type="button" onClick={() => update('format', fmt.id)} className={cn('rounded-full border px-5 py-2 font-sans text-xs font-semibold transition-all duration-200', spec.format === fmt.id ? 'border-accent bg-accent/5 text-accent' : 'border-surface-border text-zinc-400 hover:text-white')}>
                   {fmt.label}
                 </button>
               ))}
@@ -437,9 +437,9 @@ export function TrackForm({
           {spec.enableCountIn && (
             <div className="ml-12 animate-fade-in">
               <label className="label font-mono text-xs uppercase tracking-wider">Count-in Bars</label>
-              <div className="flex gap-2">
+              <div className="flex gap-2.5">
                 {[1, 2, 3, 4].map((n) => (
-                  <button key={n} type="button" onClick={() => update('countInBars', n)} className={cn('rounded-lg border w-10 h-10 font-mono text-sm font-medium transition-all', spec.countInBars === n ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border text-muted hover:text-zinc-100')}>{n}</button>
+                  <button key={n} type="button" onClick={() => update('countInBars', n)} className={cn('rounded-full border w-9 h-9 font-sans text-xs font-semibold transition-all duration-200', spec.countInBars === n ? 'border-accent bg-accent/5 text-accent' : 'border-surface-border text-zinc-400 hover:text-white')}>{n}</button>
                 ))}
               </div>
             </div>
@@ -454,7 +454,7 @@ export function TrackForm({
           type="button"
           onClick={handlePreview}
           disabled={previewState === 'loading' || spec.sections.length === 0}
-          className="inline-flex items-center gap-2 rounded-full border border-surface-border bg-surface-raised px-5 py-2.5 text-sm font-semibold text-zinc-100 transition-colors hover:border-white/30 hover:bg-white/[.04] disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full border border-surface-border bg-transparent px-5 py-2 text-xs font-sans font-semibold text-white transition-all duration-200 hover:border-white/30 hover:bg-white/[.04] disabled:opacity-50"
         >
           {previewState === 'loading' ? (
             <>
@@ -555,36 +555,36 @@ function SignupPromptModal({ onSignUp, onClose }: SignupPromptModalProps) {
       aria-labelledby="signup-prompt-title"
     >
       <div
-        className="relative mx-4 w-full max-w-md rounded-xl border border-surface-border bg-surface shadow-2xl"
+        className="relative mx-4 w-full max-w-md rounded-2xl border border-surface-border bg-zinc-950 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-3 top-3 text-2xl leading-none text-muted transition-colors hover:text-zinc-100"
+          className="absolute right-4 top-4 text-2xl leading-none text-zinc-500 transition-colors hover:text-white"
         >
           ×
         </button>
-        <div className="p-6 sm:p-7">
+        <div className="p-6 sm:p-8">
           <h3
             id="signup-prompt-title"
-            className="font-display text-2xl font-semibold tracking-tight text-zinc-100"
+            className="font-sans font-bold tracking-tight text-white text-xl"
           >
             Sign up to use manual mode
           </h3>
-          <p className="mt-3 text-sm leading-relaxed text-muted">
+          <p className="mt-3 text-sm text-zinc-400 leading-relaxed font-normal">
             Manual mode is free once you create an account, and the cap is
             generous. Takes ten seconds; your spec is saved while you sign in.
           </p>
-          <div className="mt-6 flex flex-col gap-2">
+          <div className="mt-6 flex flex-col gap-2.5">
             <Button type="button" variant="primary" size="md" onClick={onSignUp}>
               Sign up free
             </Button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg px-3 py-2 font-mono text-sm text-muted transition-colors hover:text-zinc-100"
+              className="px-3 py-2 text-xs font-sans font-semibold text-zinc-400 hover:text-white transition-colors"
             >
               Not now
             </button>
@@ -598,12 +598,12 @@ function SignupPromptModal({ onSignUp, onClose }: SignupPromptModalProps) {
 function ToggleRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (value: boolean) => void }) {
   return (
     <label className="flex items-start gap-3 cursor-pointer group">
-      <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className={cn('relative mt-0.5 inline-flex h-6 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface', checked ? 'bg-accent' : 'bg-surface-border')}>
-        <span className={cn('inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200', checked ? 'translate-x-4' : 'translate-x-0')} />
+      <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className={cn('relative mt-0.5 inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-1 focus-visible:ring-offset-black', checked ? 'bg-accent' : 'bg-zinc-800')}>
+        <span className={cn('inline-block h-4 w-4 transform rounded-full bg-white shadow-none transition-transform duration-200', checked ? 'translate-x-4' : 'translate-x-0')} />
       </button>
       <div>
-        <span className="block text-sm font-medium text-zinc-100 group-hover:text-accent transition-colors">{label}</span>
-        <span className="block text-xs text-muted">{description}</span>
+        <span className="block text-sm font-sans font-semibold text-white group-hover:text-accent transition-colors">{label}</span>
+        <span className="block text-xs text-zinc-400 font-normal mt-0.5">{description}</span>
       </div>
     </label>
   );

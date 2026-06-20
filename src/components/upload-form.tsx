@@ -327,14 +327,14 @@ export function UploadForm() {
   if (paywall) {
     return (
       <div className="mx-auto max-w-[640px]">
-        <div className="rounded-2xl border border-white/[.08] bg-zinc-900 p-10 text-center">
-          <p className="font-mono text-[11px] tracking-[.12em] uppercase text-zinc-500 mb-3">
+        <div className="rounded-none border border-white/10 bg-surface-raised p-10 text-center">
+          <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-zinc-500 mb-3 font-semibold">
             You&apos;ve used your free analysis
           </p>
-          <h3 className="font-display font-bold tracking-[-0.03em] text-zinc-100 mb-3 text-[clamp(22px,3vw,30px)]">
+          <h3 className="font-sans font-black uppercase tracking-tight text-white mb-4 text-2xl">
             Go Pro for unlimited analyses
           </h3>
-          <p className="text-[14px] text-zinc-400 max-w-[460px] mx-auto mb-7 leading-[1.55]">
+          <p className="text-xs font-mono tracking-wide text-zinc-400 max-w-[460px] mx-auto mb-7 leading-relaxed">
             Your first track analysis is on us. To analyze more songs, subscribe
             to Pro — unlimited uploads &amp; analyses, plus Studio voices.
             Finished a track already? You can still download it for $3.
@@ -342,11 +342,11 @@ export function UploadForm() {
           <div className="flex flex-col items-center gap-4">
             <Link
               href="/pricing"
-              className="inline-flex items-center justify-center rounded-full bg-accent px-7 py-3 text-[15px] font-bold text-zinc-950 hover:opacity-90 transition-opacity glow-accent"
+              className="inline-flex items-center justify-center rounded-none bg-accent px-6 py-2.5 text-xs font-mono uppercase tracking-wider font-semibold text-white hover:opacity-90 transition-opacity"
             >
               Go Pro — $19/mo
             </Link>
-            <div className="flex items-center gap-5 text-[12px]">
+            <div className="flex items-center gap-5 text-[10px] font-mono tracking-wider uppercase">
               <Link
                 href="/auth/signin?callbackUrl=/create"
                 className="text-accent hover:opacity-75 transition-opacity"
@@ -368,47 +368,47 @@ export function UploadForm() {
   }
 
   return (
-    <div className="mx-auto max-w-[640px]">
+    <div className="mx-auto max-w-[580px]">
       <div
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         className={cn(
-          'rounded-2xl border-2 border-dashed bg-zinc-900/40 p-10 text-center transition-colors',
+          'rounded-2xl border border-dashed bg-zinc-900/10 p-10 text-center transition-colors duration-200',
           isDragging
             ? 'border-accent bg-accent/5'
-            : 'border-white/[.12] hover:border-white/[.24]',
+            : 'border-white/10 hover:border-white/20',
         )}
       >
         <svg
           aria-hidden="true"
-          width="40"
-          height="40"
-          viewBox="0 0 40 40"
+          width="32"
+          height="32"
+          viewBox="0 0 24 24"
           fill="none"
-          className="mx-auto mb-4 text-zinc-400"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="mx-auto mb-4 text-zinc-500"
         >
-          <path
-            d="M20 26V8m0 0l-7 7m7-7l7 7M8 28v2a4 4 0 004 4h16a4 4 0 004-4v-2"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
         </svg>
 
         {!file && (
           <>
-            <p className="text-[17px] font-semibold text-zinc-100 mb-1.5">
-              Drop your track here
+            <p className="text-sm font-sans font-bold text-white mb-1.5">
+              Drag and drop your audio file
             </p>
-            <p className="text-[13px] text-zinc-400 mb-5">
-              MP3, WAV, M4A, AAC, OGG, or FLAC. Up to {Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB
+            <p className="text-xs text-zinc-500 mb-6 font-normal">
+              WAV, MP3, M4A, FLAC, or OGG up to {Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB
             </p>
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="inline-flex items-center px-5 py-2.5 bg-accent text-zinc-950 text-[14px] font-bold rounded-full hover:opacity-90 transition-opacity"
+              className="inline-flex items-center px-5 py-2 bg-white text-black text-xs font-sans font-semibold rounded-full hover:bg-zinc-200 transition-colors"
             >
               Choose file
             </button>
@@ -424,57 +424,57 @@ export function UploadForm() {
 
         {file && (
           <>
-            <p className="text-[15px] font-medium text-zinc-100 mb-1">{file.name}</p>
-            <p className="text-[12px] text-zinc-400 mb-5">
+            <p className="text-sm font-sans font-bold text-zinc-100 mb-1">{file.name}</p>
+            <p className="text-xs text-zinc-500 mb-5 font-normal">
               {(file.size / (1024 * 1024)).toFixed(1)} MB
             </p>
             {isTranscoding ? (
               <div className="flex flex-col items-center gap-3">
-                <div className="flex items-center gap-2 text-[14px] text-zinc-100">
+                <div className="flex items-center gap-2 text-sm text-zinc-100 font-medium">
                   <span
                     aria-hidden="true"
-                    className="inline-block h-3 w-3 rounded-full border-2 border-zinc-100 border-t-transparent animate-spin"
+                    className="inline-block h-3.5 w-3.5 rounded-full border-2 border-zinc-100 border-t-transparent animate-spin"
                   />
                   Preparing your file...
                 </div>
-                <p className="text-[12px] text-zinc-400 max-w-[360px]">
+                <p className="text-xs text-zinc-500 max-w-[360px] font-normal leading-relaxed">
                   Decoding {file.name.split('.').pop()?.toUpperCase()} to WAV in your browser before upload.
                 </p>
               </div>
             ) : isAnalyzing ? (
               <div className="flex flex-col items-center gap-3">
-                <div className="flex items-center gap-2 text-[14px] text-zinc-100">
+                <div className="flex items-center gap-2 text-sm text-zinc-100 font-medium">
                   <span
                     aria-hidden="true"
-                    className="inline-block h-3 w-3 rounded-full border-2 border-zinc-100 border-t-transparent animate-spin"
+                    className="inline-block h-3.5 w-3.5 rounded-full border-2 border-zinc-100 border-t-transparent animate-spin"
                   />
                   Analyzing your track...
                 </div>
-                <p className="text-[12px] text-zinc-400 max-w-[360px]">
+                <p className="text-xs text-zinc-500 max-w-[360px] font-normal leading-relaxed">
                   Most songs take 10 to 90 seconds. Longer tracks can take a
                   couple of minutes, so keep this tab open.
                 </p>
                 <button
                   type="button"
                   onClick={cancelAnalyze}
-                  className="text-[12px] text-zinc-400 underline hover:text-zinc-100 transition-colors"
+                  className="text-xs text-zinc-400 underline hover:text-zinc-100 transition-colors"
                 >
                   Cancel
                 </button>
               </div>
             ) : (
-              <div className="flex items-center justify-center gap-3">
+              <div className="flex items-center justify-center gap-4">
                 <button
                   type="button"
                   onClick={handleAnalyze}
-                  className="inline-flex items-center px-5 py-2.5 bg-accent text-zinc-950 text-[14px] font-bold rounded-full hover:opacity-90 transition-opacity"
+                  className="inline-flex items-center px-5 py-2 bg-white text-black text-xs font-sans font-semibold rounded-full hover:bg-zinc-200 transition-colors"
                 >
                   Analyze track
                 </button>
                 <button
                   type="button"
                   onClick={reset}
-                  className="text-[13px] text-zinc-400 hover:text-zinc-100"
+                  className="text-xs font-sans font-medium text-zinc-400 hover:text-white transition-colors"
                 >
                   Choose different file
                 </button>
@@ -484,7 +484,7 @@ export function UploadForm() {
         )}
 
         {error && (
-          <p className="mt-4 text-[12px] text-red-600 font-mono">{error}</p>
+          <p className="mt-4 text-xs text-red-500 font-mono">{error}</p>
         )}
       </div>
     </div>

@@ -83,10 +83,10 @@ export default async function SignInPage({
       <Nav />
       <main className="mx-auto max-w-md px-4 sm:px-6 lg:px-8 pt-28 pb-20">
         <div className="mb-10">
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-zinc-100 sm:text-5xl">
+          <h1 className="font-sans font-extrabold tracking-tight text-white text-3xl md:text-4xl">
             Sign in
           </h1>
-          <p className="mt-3 text-muted text-lg leading-relaxed">
+          <p className="mt-3 text-sm text-zinc-400 font-normal">
             Sign in to manage your tracks and subscription.
           </p>
         </div>
@@ -94,7 +94,7 @@ export default async function SignInPage({
         {signInError && (
           <div
             role="alert"
-            className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+            className="mb-6 rounded-xl border border-red-500/20 bg-red-950/10 p-4 text-xs font-sans text-red-400"
           >
             {signInError}
           </div>
@@ -104,7 +104,7 @@ export default async function SignInPage({
           <form action={googleSignIn}>
             <SubmitButton
               pendingLabel="Redirecting…"
-              className="w-full flex items-center justify-center gap-3 rounded-lg border border-white/[.12] bg-white px-4 py-3 text-sm font-semibold text-zinc-100 hover:bg-zinc-950 transition-colors"
+              className="w-full flex items-center justify-center gap-3 rounded-full border border-white/20 bg-zinc-900/10 px-4 py-2.5 text-xs font-sans font-semibold text-white hover:bg-white/5 transition-colors"
             >
               <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18">
                 <path
@@ -130,7 +130,7 @@ export default async function SignInPage({
         )}
 
         {googleEnabled && emailEnabled && (
-          <div className="my-6 flex items-center gap-3 text-[11px] uppercase tracking-[0.18em] text-muted">
+          <div className="my-6 flex items-center gap-3 text-xs text-zinc-500 font-sans">
             <span className="h-px flex-1 bg-white/[.08]" />
             or
             <span className="h-px flex-1 bg-white/[.08]" />
@@ -139,21 +139,23 @@ export default async function SignInPage({
 
         {emailEnabled && (
           <form action={emailSignIn} className="flex flex-col gap-4">
-            <label className="text-sm text-muted" htmlFor="email">
-              Email address
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="you@example.com"
-              className="input px-4 py-3"
-            />
+            <div>
+              <label className="label" htmlFor="email">
+                Email address
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                autoComplete="email"
+                placeholder="you@example.com"
+                className="input px-4 py-3"
+              />
+            </div>
             <SubmitButton
               pendingLabel="Sending…"
-              className="w-full btn btn-primary rounded-lg py-3 text-sm font-semibold"
+              className="w-full btn btn-primary py-2.5 text-xs font-sans font-semibold rounded-full"
             >
               Send sign-in link
             </SubmitButton>
@@ -161,15 +163,15 @@ export default async function SignInPage({
         )}
 
         {!googleEnabled && !emailEnabled && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-4 text-xs font-sans text-amber-400">
             Sign-in is not configured for this deployment yet. Set
-            <code className="mx-1 font-mono">GOOGLE_CLIENT_ID</code> +
-            <code className="mx-1 font-mono">GOOGLE_CLIENT_SECRET</code>, or an
+            <code className="mx-1 font-mono text-amber-200 bg-black/40 px-1 py-0.5">GOOGLE_CLIENT_ID</code> +
+            <code className="mx-1 font-mono text-amber-200 bg-black/40 px-1 py-0.5">GOOGLE_CLIENT_SECRET</code>, or an
             email provider, to enable sign-in.
           </div>
         )}
 
-        <p className="mt-6 text-sm text-muted/70">
+        <p className="mt-8 text-xs text-zinc-500 leading-relaxed font-normal">
           Buying a single track does not require an account. Sign in is needed
           for Pro subscriptions and unlimited uploads.
         </p>

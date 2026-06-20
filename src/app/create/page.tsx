@@ -29,14 +29,14 @@ export default async function CreatePage({
     <>
       <Nav />
       <main className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
-        <div className="mb-10 text-center">
-          <p className="font-mono text-[11px] tracking-[.12em] uppercase text-zinc-500 mb-3">
+        <div className="mb-12 text-center">
+          <p className="font-sans text-[10px] tracking-[0.2em] uppercase text-zinc-500 mb-4 font-semibold">
             Create a cue track
           </p>
-          <h1 className="font-display font-bold tracking-[-0.035em] text-zinc-100 mb-3 text-[clamp(30px,4vw,46px)]">
+          <h1 className="font-sans font-extrabold tracking-tight text-white mb-4 text-3xl md:text-4xl">
             Upload your song. We&apos;ll do the rest.
           </h1>
-          <p className="text-[15px] text-zinc-400 max-w-[520px] mx-auto leading-[1.55]">
+          <p className="text-sm text-zinc-400 max-w-[520px] mx-auto leading-relaxed">
             Drop your track and we&apos;ll detect the tempo and lay out your
             sections. Review the suggestion, then download your click + cue
             track. Your first analysis is free.

@@ -4,15 +4,15 @@ import React from 'react';
 import { cn } from '@/lib/cn';
 
 const variantClasses = {
-  primary:   'bg-accent text-zinc-950 font-bold rounded-full hover:opacity-90 active:scale-[0.98]',
-  secondary: 'border border-surface-border text-zinc-100 bg-surface-raised rounded-lg hover:bg-white/[.04] active:scale-[0.98]',
-  ghost:     'text-zinc-400 hover:text-zinc-100 rounded-lg hover:bg-white/[.04]',
+  primary:   'bg-white text-black font-sans tracking-normal text-xs font-semibold rounded-full hover:bg-zinc-200 active:scale-[0.98]',
+  secondary: 'border border-surface-border text-white bg-transparent font-sans tracking-normal text-xs font-semibold rounded-full hover:bg-white/[.04] active:scale-[0.98]',
+  ghost:     'text-zinc-400 hover:text-white font-sans tracking-normal text-xs font-semibold rounded-full hover:bg-white/[.04]',
 } as const;
 
 const sizeClasses = {
-  sm: 'px-4 py-1.5 text-xs gap-1.5',
-  md: 'px-5 py-2.5 text-sm gap-2',
-  lg: 'px-7 py-3 text-[15px] gap-2.5',
+  sm: 'px-4 py-1.5 text-[11px] gap-1.5',
+  md: 'px-5 py-2.5 text-xs gap-2',
+  lg: 'px-7 py-3 text-sm gap-2.5',
 } as const;
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -54,7 +54,7 @@ export function Button({
       className={cn(
         'inline-flex items-center justify-center font-medium transition-all duration-150',
         'disabled:opacity-50 disabled:cursor-not-allowed',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090b]',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-black',
         variantClasses[variant],
         sizeClasses[size],
         className,

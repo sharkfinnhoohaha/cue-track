@@ -25,42 +25,42 @@ export function CreateExperience({
       <StepIndicator current={1} />
 
       {manual ? (
-        <div className="space-y-6">
-          <div className="rounded-2xl border border-white/[.08] bg-zinc-900 px-6 py-5">
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-[17px] font-semibold text-zinc-100">
-                Manual mode
-              </h2>
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/10 px-6 py-5">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-sm font-sans font-bold text-white">
+                  Manual mode
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setManual(false)}
+                  className="text-xs font-sans font-semibold text-accent hover:opacity-75 transition-opacity"
+                >
+                  ← Back to upload
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-zinc-400 leading-relaxed font-normal">
+                Enter your BPM, sections, and click sound directly — handy when
+                you&apos;re charting from scratch.
+                {!isAuthenticated && ' Sign up free to generate.'}
+              </p>
+            </div>
+            <TrackForm isAuthenticated={isAuthenticated} />
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <UploadForm />
+            <p className="text-center text-xs font-sans text-zinc-400">
+              Already know your BPM and song structure?{' '}
               <button
                 type="button"
-                onClick={() => setManual(false)}
-                className="text-[13px] font-medium text-accent hover:opacity-75 transition-opacity"
+                onClick={() => setManual(true)}
+                className="font-bold text-accent hover:opacity-75 transition-opacity"
               >
-                ← Back to upload
+                Enter it manually
               </button>
-            </div>
-            <p className="mt-1 text-[13px] text-zinc-400 leading-[1.55]">
-              Enter your BPM, sections, and click sound directly — handy when
-              you&apos;re charting from scratch.
-              {!isAuthenticated && ' Sign up free to generate.'}
             </p>
           </div>
-          <TrackForm isAuthenticated={isAuthenticated} />
-        </div>
-      ) : (
-        <div className="space-y-6">
-          <UploadForm />
-          <p className="text-center text-[13px] text-zinc-400">
-            Already know your BPM and song structure?{' '}
-            <button
-              type="button"
-              onClick={() => setManual(true)}
-              className="font-medium text-accent underline underline-offset-4 hover:opacity-75 transition-opacity"
-            >
-              Enter it manually
-            </button>
-          </p>
-        </div>
       )}
     </div>
   );

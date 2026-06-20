@@ -46,27 +46,27 @@ export default function HomePage() {
       <Nav />
 
       {/* ── Hero ── */}
-      <div className="border-b border-white/[.08] bg-gradient-to-b from-zinc-950 to-zinc-900">
-        <section className="px-6 pt-[128px] pb-24 text-center">
-          <p className="font-mono text-[11px] tracking-[.12em] uppercase text-accent mb-6 font-semibold">
+      <div className="border-b border-white/10 bg-black">
+        <section className="px-6 pt-32 pb-24 text-center">
+          <p className="font-sans text-[10px] tracking-[0.2em] uppercase text-accent mb-6 font-semibold">
             Click &amp; cue tracks for live musicians
           </p>
 
-          <h1 className="font-display font-bold tracking-[-0.025em] leading-[1.02] text-zinc-100 max-w-[880px] mx-auto mb-5 text-[clamp(40px,6.4vw,76px)]">
+          <h1 className="font-sans font-extrabold tracking-tight leading-[1.1] text-white max-w-[880px] mx-auto mb-8 text-[clamp(36px,5.5vw,64px)]">
             Analyze your track.<br />
             Get a cue-track back.
           </h1>
 
-          <p className="text-[18px] text-zinc-400 max-w-[480px] mx-auto mb-10 leading-[1.55] font-normal">
+          <p className="text-base text-zinc-400 max-w-[540px] mx-auto mb-12 leading-relaxed">
             Drop your song. We&apos;ll match it with a click track and spoken
             cues. No DAW, no music theory required.
           </p>
 
           <UploadForm />
 
-          <div className="mt-6 flex flex-col items-center gap-3">
+          <div className="mt-8 flex flex-col items-center gap-4">
             <DemoPlayer />
-            <p className="font-mono text-[11px] text-zinc-500 tracking-[.08em]">
+            <p className="text-xs text-zinc-500 tracking-wide">
               Your first analysis is free &nbsp;·&nbsp; no signup required
             </p>
           </div>
@@ -74,21 +74,21 @@ export default function HomePage() {
       </div>
 
       {/* ── Manual mode (secondary, demoted) ── */}
-      <div id="manual" className="border-b border-white/[.08] bg-zinc-900/30">
+      <div id="manual" className="border-b border-white/10 bg-surface-raised">
         <section className="max-w-3xl mx-auto px-6 py-20 text-center">
-          <span className="font-mono text-[11px] tracking-[.12em] uppercase text-zinc-500 mb-3 block">
+          <span className="font-sans text-[10px] tracking-[0.2em] uppercase text-zinc-500 mb-4 block">
             Or build manually
           </span>
-          <h2 className="font-display font-bold tracking-[-0.02em] text-zinc-100 mb-3 text-[clamp(24px,3vw,36px)]">
+          <h2 className="font-sans font-bold tracking-tight text-white mb-4 text-2xl md:text-3xl">
             Know your BPM? Skip the upload.
           </h2>
-          <p className="text-[15px] text-zinc-400 max-w-[480px] mx-auto leading-[1.6] mb-7">
+          <p className="text-sm text-zinc-400 max-w-[480px] mx-auto leading-relaxed mb-8">
             Enter your tempo, sections, and click sound directly — handy when
             you&apos;re charting a song from scratch.
           </p>
           <Link
             href="/create?mode=manual"
-            className="inline-flex items-center px-6 py-3 bg-zinc-900 border border-white/[.08] text-zinc-100 text-[14px] font-semibold rounded-full hover:bg-white/[.04] transition-all"
+            className="inline-flex items-center px-6 py-2.5 bg-transparent border border-white/20 text-white text-xs font-sans font-semibold rounded-full hover:bg-white/[0.05] transition-all"
           >
             Open manual mode
           </Link>
@@ -96,25 +96,25 @@ export default function HomePage() {
       </div>
 
       {/* ── How it Works ── */}
-      <div id="how-it-works" className="border-b border-white/[.08] bg-zinc-950">
-        <section className="max-w-[1080px] mx-auto px-6 py-[100px]">
-          <span className="font-mono text-[11px] tracking-[.12em] uppercase text-zinc-500 mb-3.5 block">
+      <div id="how-it-works" className="border-b border-white/10 bg-black">
+        <section className="max-w-[1080px] mx-auto px-6 py-24">
+          <span className="font-sans text-[10px] tracking-[0.2em] uppercase text-zinc-500 mb-4 block font-semibold">
             How it works
           </span>
-          <h2 className="font-display font-bold tracking-[-0.02em] text-zinc-100 mb-14 text-[clamp(26px,3.2vw,40px)]">
+          <h2 className="font-sans font-bold tracking-tight text-white mb-12 text-2xl md:text-3xl">
             Three steps to stage-ready.
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-white/[.08] border border-white/[.08] rounded-[14px] overflow-hidden">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {STEPS.map((step) => (
-              <div key={step.num} className="bg-zinc-900/90 p-10">
-                <span className="font-mono text-[11px] tracking-[.12em] uppercase text-accent mb-5 block font-medium">
+              <div key={step.num} className="card p-8 bg-zinc-900/10">
+                <span className="font-mono text-xs tracking-wider text-accent mb-6 block font-bold">
                   {step.num}
                 </span>
-                <div className="text-[20px] font-bold tracking-[-0.025em] text-zinc-100 mb-2.5">
+                <div className="font-sans font-bold tracking-tight text-white mb-3 text-lg">
                   {step.title}
                 </div>
-                <p className="text-[14px] text-zinc-400 leading-[1.65]">{step.desc}</p>
+                <p className="text-sm text-zinc-400 leading-relaxed font-normal">{step.desc}</p>
               </div>
             ))}
           </div>
@@ -122,28 +122,28 @@ export default function HomePage() {
       </div>
 
       {/* ── Features ── */}
-      <div className="border-b border-white/[.08] bg-zinc-900/10">
-        <section className="max-w-[1080px] mx-auto px-6 py-[100px]">
-          <span className="font-mono text-[11px] tracking-[.12em] uppercase text-zinc-500 mb-3.5 block">
+      <div className="border-b border-white/10 bg-surface-raised">
+        <section className="max-w-[1080px] mx-auto px-6 py-24">
+          <span className="font-sans text-[10px] tracking-[0.2em] uppercase text-zinc-500 mb-4 block font-semibold">
             Capabilities
           </span>
-          <h2 className="font-display font-bold tracking-[-0.02em] text-zinc-100 mb-3 text-[clamp(26px,3.2vw,40px)]">
+          <h2 className="font-sans font-bold tracking-tight text-white mb-4 text-2xl md:text-3xl">
             Built for the stage.
           </h2>
-          <p className="text-[17px] text-zinc-400 mb-14 max-w-[360px]">
+          <p className="text-sm text-zinc-400 mb-12 max-w-sm font-normal">
             Every feature exists because a musician needed it.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-white/[.08] border border-white/[.08] rounded-[14px] overflow-hidden">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {FEATURES.map((f) => (
-              <div key={f.key} className="bg-zinc-900/90 p-8">
-                <span className="font-mono text-[10px] tracking-[.12em] uppercase text-accent mb-3.5 block font-medium">
+              <div key={f.key} className="card p-8 bg-black/40">
+                <span className="font-mono text-[10px] tracking-wider uppercase text-accent mb-4 block font-bold">
                   {f.key}
                 </span>
-                <div className="text-[15px] font-semibold tracking-[-0.02em] text-zinc-100 mb-1.5">
+                <div className="font-sans font-bold tracking-tight text-white mb-2 text-sm">
                   {f.title}
                 </div>
-                <p className="text-[13px] text-zinc-400 leading-[1.6]">{f.desc}</p>
+                <p className="text-xs text-zinc-400 leading-relaxed font-normal">{f.desc}</p>
               </div>
             ))}
           </div>
@@ -151,59 +151,63 @@ export default function HomePage() {
       </div>
 
       {/* ── Pricing ── */}
-      <div className="border-b border-white/[.08] bg-zinc-950">
-        <section className="max-w-[1080px] mx-auto px-6 py-[100px]">
-          <span className="font-mono text-[11px] tracking-[.12em] uppercase text-zinc-500 mb-3.5 block">
+      <div className="border-b border-white/10 bg-black">
+        <section className="max-w-[1080px] mx-auto px-6 py-24">
+          <span className="font-sans text-[10px] tracking-[0.2em] uppercase text-zinc-500 mb-4 block font-semibold">
             Pricing
           </span>
-          <h2 className="font-display font-bold tracking-[-0.02em] text-zinc-100 mb-3 text-[clamp(26px,3.2vw,40px)]">
+          <h2 className="font-sans font-bold tracking-tight text-white mb-4 text-2xl md:text-3xl">
             Simple, honest pricing.
           </h2>
-          <p className="text-[17px] text-zinc-400 mb-14">No hidden fees.</p>
+          <p className="text-sm text-zinc-400 mb-12 font-normal">No subscription tricks. Choose what works.</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-[640px]">
-            <div className="bg-zinc-900 border border-white/[.08] rounded-[14px] p-9">
-              <span className="font-mono text-[10px] tracking-[.12em] uppercase text-zinc-500 mb-[18px] block">
-                Per Track
-              </span>
-              <div className="font-mono text-[44px] font-semibold tracking-[-0.04em] text-zinc-100 leading-none mb-1">
-                $3
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-[680px]">
+            <div className="card p-8 bg-zinc-900/10 relative flex flex-col justify-between">
+              <div>
+                <span className="font-mono text-[10px] tracking-wider uppercase text-zinc-500 mb-4 block font-bold">
+                  Per Track
+                </span>
+                <div className="font-sans text-4xl font-extrabold text-white leading-none mb-2">
+                  $3
+                </div>
+                <span className="font-mono text-[9px] text-zinc-500 tracking-[0.1em] uppercase mb-6 block font-semibold">
+                  one-time · no account
+                </span>
+                <p className="text-sm text-zinc-400 leading-relaxed mb-8 font-normal">
+                  Pay per download. No subscription needed.
+                </p>
               </div>
-              <span className="font-mono text-[11px] text-zinc-400 tracking-[.04em] mb-5 block">
-                one-time · no account
-              </span>
-              <p className="text-[13px] text-zinc-400 leading-[1.6] mb-7">
-                Pay per download. No subscription needed.
-              </p>
               <Link
                 href="/create"
-                className="flex items-center justify-center w-full py-2.5 text-[14px] font-semibold rounded-lg border border-white/[.12] text-zinc-100 hover:bg-white/[.04] transition-all"
+                className="flex items-center justify-center w-full py-2.5 text-xs font-sans font-semibold rounded-full border border-white/20 text-white hover:bg-white/5 hover:border-white transition-all"
               >
                 Get Started
               </Link>
             </div>
 
-            <div className="bg-zinc-900 border border-accent/30 rounded-[14px] p-9 relative glow-accent">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                <span className="bg-accent text-zinc-950 font-mono text-[9px] font-extrabold uppercase px-2.5 py-0.5 rounded-full tracking-wider">
+            <div className="card p-8 bg-zinc-900/10 relative flex flex-col justify-between">
+              <div className="absolute top-4 right-4">
+                <span className="bg-accent text-white font-sans text-[9px] font-bold uppercase px-2.5 py-1 rounded-full tracking-wider">
                   Popular
                 </span>
               </div>
-              <span className="font-mono text-[10px] tracking-[.12em] uppercase text-accent mb-[18px] block font-semibold">
-                Pro
-              </span>
-              <div className="font-mono text-[44px] font-semibold tracking-[-0.04em] text-zinc-100 leading-none mb-1">
-                $19
+              <div>
+                <span className="font-mono text-[10px] tracking-wider uppercase text-accent mb-4 block font-bold">
+                  Pro
+                </span>
+                <div className="font-sans text-4xl font-extrabold text-white leading-none mb-2">
+                  $19
+                </div>
+                <span className="font-mono text-[9px] text-zinc-500 tracking-[0.1em] uppercase mb-6 block font-semibold">
+                  per month · unlimited
+                </span>
+                <p className="text-sm text-zinc-400 leading-relaxed mb-8 font-normal">
+                  Unlimited downloads, saved presets, and Studio voices.
+                </p>
               </div>
-              <span className="font-mono text-[11px] text-zinc-400 tracking-[.04em] mb-5 block">
-                per month · unlimited
-              </span>
-              <p className="text-[13px] text-zinc-400 leading-[1.6] mb-7">
-                Unlimited downloads, saved presets, and Studio voices.
-              </p>
               <Link
                 href="/pricing"
-                className="flex items-center justify-center w-full py-2.5 text-[14px] font-bold rounded-lg bg-accent text-zinc-950 hover:opacity-90 transition-opacity"
+                className="flex items-center justify-center w-full py-2.5 text-xs font-sans font-semibold rounded-full bg-white text-black hover:bg-zinc-200 transition-all"
               >
                 Go Pro
               </Link>
@@ -213,17 +217,17 @@ export default function HomePage() {
       </div>
 
       {/* ── CTA ── */}
-      <section className="px-6 py-[120px] text-center bg-gradient-to-b from-zinc-950 to-zinc-900">
-        <h2 className="font-display font-bold tracking-[-0.025em] leading-[1.05] text-zinc-100 max-w-[660px] mx-auto mb-5 text-[clamp(30px,4.2vw,52px)]">
+      <section className="px-6 py-28 text-center bg-black">
+        <h2 className="font-sans font-bold tracking-tight text-white max-w-[660px] mx-auto mb-6 text-[clamp(28px,4vw,48px)] leading-[1.1]">
           Your cue track, ready in minutes.
         </h2>
-        <p className="text-[17px] text-zinc-400 max-w-[400px] mx-auto mb-9 leading-[1.55]">
+        <p className="text-sm text-zinc-400 max-w-sm mx-auto mb-10 leading-relaxed font-normal">
           Drop your track and skip the busywork — no DAW, no charting, no
           fiddling with a metronome.
         </p>
         <Link
           href="/create"
-          className="inline-flex items-center px-7 py-3 bg-accent text-zinc-950 text-[15px] font-bold rounded-full hover:opacity-90 transition-opacity glow-accent"
+          className="inline-flex items-center px-8 py-3 bg-white text-black text-xs font-sans font-semibold rounded-full hover:bg-zinc-200 transition-all"
         >
           Try it now
         </Link>

@@ -78,14 +78,14 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-10">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="font-display text-4xl font-semibold tracking-tight text-zinc-100">
+              <h1 className="font-sans font-extrabold tracking-tight text-white text-3xl md:text-4xl">
                 Your Tracks
               </h1>
               {isPro && (
-                <span className="badge-accent font-mono text-xs uppercase">Pro</span>
+                <span className="badge-accent">Pro</span>
               )}
             </div>
-            <p className="mt-2 text-muted text-sm">
+            <p className="mt-2 text-sm text-zinc-400 font-normal">
               {tracks.length > 0
                 ? `${tracks.length} track${tracks.length !== 1 ? 's' : ''} generated`
                 : 'Manage and download your click tracks'}
@@ -119,12 +119,12 @@ export default function DashboardPage() {
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="card p-5 animate-pulse">
                 <div className="flex items-center gap-4">
-                  <div className="skeleton h-10 w-10 rounded-lg" />
+                  <div className="skeleton h-10 w-10 rounded-full" />
                   <div className="flex-1 space-y-2">
                     <div className="skeleton h-5 w-48" />
                     <div className="skeleton h-3 w-32" />
                   </div>
-                  <div className="skeleton h-8 w-20 rounded-lg" />
+                  <div className="skeleton h-8 w-20 rounded-full" />
                 </div>
               </div>
             ))}
@@ -140,15 +140,15 @@ export default function DashboardPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
                 </svg>
               </div>
-              <h2 className="font-display text-xl font-semibold text-zinc-100 mb-2">
+              <h2 className="font-sans font-bold tracking-tight text-white text-lg mb-2">
                 No tracks yet
               </h2>
-              <p className="text-sm text-muted mb-6 max-w-sm">
+              <p className="text-sm text-zinc-400 mb-6 max-w-sm font-normal">
                 Create your first click track. Define your song structure, choose your sounds,
                 and generate a studio-quality track in seconds.
               </p>
               <Link href="/create">
-                <Button variant="primary" size="md" className="glow-accent">
+                <Button variant="primary" size="md">
                   Create Your First Track
                 </Button>
               </Link>
@@ -169,10 +169,10 @@ export default function DashboardPage() {
                   href={`/tracks/${track.id}`}
                   className="group block"
                 >
-                  <div className="card p-4 sm:p-5 transition-all hover:border-accent/30 hover:bg-surface-raised/80">
+                  <div className="card p-4 sm:p-5 transition-all duration-200 hover:border-accent/40 hover:bg-zinc-900/10">
                     <div className="flex items-center gap-4">
                       {/* Play icon */}
-                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-surface-border group-hover:bg-accent/15 transition-colors">
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-surface-border group-hover:bg-accent/15 transition-colors">
                         <svg
                           className="h-4 w-4 text-muted group-hover:text-accent transition-colors ml-0.5"
                           viewBox="0 0 20 20"
@@ -184,21 +184,21 @@ export default function DashboardPage() {
  
                       {/* Track info */}
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-medium text-zinc-100 truncate group-hover:text-accent transition-colors">
+                        <h3 className="font-sans font-semibold text-sm tracking-tight text-white truncate group-hover:text-accent transition-colors">
                           {track.title}
                         </h3>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                          <span className="font-mono text-xs text-muted">{track.spec.bpm} BPM</span>
-                          <span className="font-mono text-xs text-muted">{tsLabel}</span>
-                          <span className="font-mono text-xs text-muted">
+                          <span className="font-mono text-xs text-zinc-500">{track.spec.bpm} BPM</span>
+                          <span className="font-mono text-xs text-zinc-500">{tsLabel}</span>
+                          <span className="font-mono text-xs text-zinc-500">
                             {sectionCount} section{sectionCount !== 1 ? 's' : ''}
                           </span>
-                          <span className="font-mono text-xs text-muted">
+                          <span className="font-mono text-xs text-zinc-500">
                             {formatDuration(track.duration)}
                           </span>
                         </div>
                       </div>
-
+ 
                       {/* Status & date */}
                       <div className="hidden sm:flex flex-col items-end gap-1.5 flex-shrink-0">
                         <span
@@ -213,11 +213,11 @@ export default function DashboardPage() {
                           {track.status === 'rendering' && 'Rendering'}
                           {track.status === 'failed' && 'Failed'}
                         </span>
-                        <span className="text-xs text-muted">
+                        <span className="text-xs text-zinc-500 font-sans">
                           {formatDate(track.createdAt)}
                         </span>
                       </div>
-
+ 
                       {/* Arrow */}
                       <svg
                         className="h-4 w-4 text-muted group-hover:text-accent transition-colors flex-shrink-0"

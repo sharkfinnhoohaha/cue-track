@@ -101,10 +101,10 @@ function FAQItem({ q, a }: { q: string; a: string }) {
         onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between py-5 text-left"
       >
-        <span className="text-sm font-medium text-zinc-100 pr-4">{q}</span>
+        <span className="text-sm font-semibold text-white pr-4">{q}</span>
         <svg
           className={cn(
-            'h-4 w-4 text-muted flex-shrink-0 transition-transform duration-200',
+            'h-4 w-4 text-zinc-500 flex-shrink-0 transition-transform duration-200',
             open && 'rotate-180',
           )}
           viewBox="0 0 20 20"
@@ -119,7 +119,7 @@ function FAQItem({ q, a }: { q: string; a: string }) {
       </button>
       {open && (
         <div className="pb-5 pr-8 animate-fade-in">
-          <p className="text-sm text-muted leading-relaxed">{a}</p>
+          <p className="text-sm text-zinc-400 leading-relaxed font-normal">{a}</p>
         </div>
       )}
     </div>
@@ -165,59 +165,56 @@ export default function PricingPage() {
   return (
     <>
       <Nav />
-      <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
+      <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 pt-32 pb-24">
         {/* Header */}
-        <div className="text-center mb-16">
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-zinc-100 sm:text-5xl">
-            Simple, transparent pricing
+        <div className="text-center mb-20">
+          <h1 className="font-sans font-extrabold tracking-tight text-white mb-4 text-3xl sm:text-5xl">
+            Simple, transparent pricing.
           </h1>
-          <p className="mt-4 text-lg text-muted max-w-xl mx-auto">
-            Pay per track or go unlimited with Pro. No hidden fees, no surprise charges.
+          <p className="mt-4 text-sm text-zinc-400 max-w-xl mx-auto font-normal">
+            Pay per track or go unlimited with Pro. No subscription tricks, cancel anytime.
           </p>
         </div>
 
         {/* Pricing cards */}
-        <div className="grid gap-6 sm:grid-cols-2 max-w-3xl mx-auto mb-24">
+        <div className="grid gap-6 md:grid-cols-2 max-w-3xl mx-auto mb-24">
           {PLANS.map((plan) => (
             <div
               key={plan.id}
-              className={cn(
-                'relative rounded-xl border p-6 sm:p-8 transition-all',
-                plan.highlighted
-                  ? 'border-accent/40 bg-surface-raised glow-accent'
-                  : 'border-surface-border bg-surface-raised',
-              )}
+              className="card p-8 bg-zinc-900/10 relative flex flex-col justify-between"
             >
               {plan.highlighted && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-                  <span className="inline-flex items-center whitespace-nowrap rounded-full bg-accent px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-950 shadow-sm">
+                <div className="absolute top-4 right-4 z-10">
+                  <span className="inline-flex items-center whitespace-nowrap bg-accent px-3 py-1 font-sans text-[9px] font-bold uppercase tracking-wider text-white rounded-full">
                     Most Popular
                   </span>
                 </div>
               )}
 
-              <h2 className="font-display text-2xl font-semibold text-zinc-100">
-                {plan.name}
-              </h2>
-              <p className="mt-1 text-sm text-muted">{plan.description}</p>
+              <div>
+                <h2 className="font-sans font-bold tracking-tight text-white text-2xl">
+                  {plan.name}
+                </h2>
+                <p className="mt-2 text-sm text-zinc-400 font-normal">{plan.description}</p>
 
-              <div className="mt-6 flex items-baseline gap-1">
-                <span className="font-display text-5xl font-bold text-zinc-100">
-                  {plan.price}
-                </span>
-                <span className="text-muted text-sm">{plan.period}</span>
+                <div className="mt-6 flex items-baseline gap-1">
+                  <span className="font-sans text-5xl font-extrabold text-white">
+                    {plan.price}
+                  </span>
+                  <span className="text-zinc-500 font-sans text-sm">{plan.period}</span>
+                </div>
+
+                <ul className="mt-8 space-y-4">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-3">
+                      <CheckIcon />
+                      <span className="text-sm text-zinc-400 font-normal">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
 
-              <ul className="mt-8 space-y-3">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2.5">
-                    <CheckIcon />
-                    <span className="text-sm text-zinc-400">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <div className="mt-8">
+              <div className="mt-10">
                 {plan.id === 'pro' ? (
                   <>
                     <Button
@@ -230,7 +227,7 @@ export default function PricingPage() {
                       {plan.cta}
                     </Button>
                     {proError && (
-                      <p className="mt-3 text-xs text-red-600 text-center">{proError}</p>
+                      <p className="mt-3 text-xs font-sans text-red-500 text-center tracking-wide">{proError}</p>
                     )}
                   </>
                 ) : (
@@ -238,7 +235,7 @@ export default function PricingPage() {
                     <Button
                       variant="secondary"
                       size="lg"
-                      className="w-full"
+                      className="w-full bg-transparent border border-white/20 hover:bg-white/5"
                     >
                       {plan.cta}
                     </Button>
@@ -251,10 +248,10 @@ export default function PricingPage() {
 
         {/* FAQ */}
         <div className="max-w-2xl mx-auto">
-          <h2 className="font-display text-3xl font-semibold tracking-tight text-zinc-100 text-center mb-10">
-            Frequently Asked Questions
+          <h2 className="font-sans font-bold tracking-tight text-white text-center text-2xl md:text-3xl mb-12">
+            Frequently asked questions
           </h2>
-          <div>
+          <div className="space-y-1">
             {FAQ_ITEMS.map((item) => (
               <FAQItem key={item.q} q={item.q} a={item.a} />
             ))}

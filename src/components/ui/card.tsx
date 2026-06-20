@@ -10,16 +10,15 @@ export function Card({ header, elevated = false, className, children, ...props }
   return (
     <div
       className={cn(
-        'bg-surface-raised border border-surface-border rounded-[14px]',
-        elevated && 'shadow-lg shadow-black/20',
+        'bg-surface-raised border border-surface-border rounded-2xl',
         className,
       )}
       {...props}
     >
       {header && (
-        <div className="px-4 py-3 border-b border-surface-border">
+        <div className="px-5 py-4 border-b border-surface-border">
           {typeof header === 'string' ? (
-            <h4 className="font-semibold text-sm text-zinc-100">{header}</h4>
+            <h4 className="font-sans tracking-wide text-xs font-bold text-zinc-300 uppercase">{header}</h4>
           ) : (
             header
           )}
