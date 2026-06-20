@@ -11,8 +11,15 @@
  */
 import { readFileSync } from 'fs';
 import { extname } from 'path';
+import { Agent, setGlobalDispatcher } from 'undici';
 import type { CorpusEntry } from './corpus';
 import type { DetectorOutput } from './convert';
+
+const agent = new Agent({
+  headersTimeout: 0,
+  bodyTimeout: 0,
+});
+setGlobalDispatcher(agent);
 
 function mimeFor(path: string): string {
   const ext = extname(path).toLowerCase();
@@ -68,6 +75,7 @@ export async function runDetectorHttp(
           method: 'POST',
           headers: { 'content-type': mimeFor(e.audioPath), 'x-worker-secret': opts.secret },
           body: new Uint8Array(bytes),
+          signal: AbortSignal.timeout(900000),
         });
         if (!res.ok) {
           console.error(`[detector-http] ${e.id}: worker returned ${res.status}`);

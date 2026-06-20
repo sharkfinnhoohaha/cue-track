@@ -4,9 +4,9 @@ import React from 'react';
 import { cn } from '@/lib/cn';
 
 const variantClasses = {
-  primary:   'bg-[#1d1d1f] text-[#f5f5f7] font-semibold rounded-full hover:opacity-80',
-  secondary: 'border border-black/[.13] text-[#1d1d1f] bg-white rounded-lg hover:opacity-70',
-  ghost:     'text-[#6e6e73] hover:text-[#1d1d1f] rounded-lg hover:bg-black/[.05]',
+  primary:   'bg-accent text-zinc-950 font-bold rounded-full hover:opacity-90 active:scale-[0.98]',
+  secondary: 'border border-surface-border text-zinc-100 bg-surface-raised rounded-lg hover:bg-white/[.04] active:scale-[0.98]',
+  ghost:     'text-zinc-400 hover:text-zinc-100 rounded-lg hover:bg-white/[.04]',
 } as const;
 
 const sizeClasses = {
@@ -54,7 +54,7 @@ export function Button({
       className={cn(
         'inline-flex items-center justify-center font-medium transition-all duration-150',
         'disabled:opacity-50 disabled:cursor-not-allowed',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0066cc] focus-visible:ring-offset-2',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090b]',
         variantClasses[variant],
         sizeClasses[size],
         className,

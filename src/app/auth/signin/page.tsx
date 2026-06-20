@@ -83,7 +83,7 @@ export default async function SignInPage({
       <Nav />
       <main className="mx-auto max-w-md px-4 sm:px-6 lg:px-8 pt-28 pb-20">
         <div className="mb-10">
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
+          <h1 className="font-display text-4xl font-semibold tracking-tight text-zinc-100 sm:text-5xl">
             Sign in
           </h1>
           <p className="mt-3 text-muted text-lg leading-relaxed">
@@ -104,7 +104,7 @@ export default async function SignInPage({
           <form action={googleSignIn}>
             <SubmitButton
               pendingLabel="Redirecting…"
-              className="w-full flex items-center justify-center gap-3 rounded-lg border border-black/[.13] bg-white px-4 py-3 text-sm font-semibold text-[#1d1d1f] hover:bg-[#f5f5f7] transition-colors"
+              className="w-full flex items-center justify-center gap-3 rounded-lg border border-white/[.12] bg-white px-4 py-3 text-sm font-semibold text-zinc-100 hover:bg-zinc-950 transition-colors"
             >
               <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18">
                 <path
@@ -131,9 +131,9 @@ export default async function SignInPage({
 
         {googleEnabled && emailEnabled && (
           <div className="my-6 flex items-center gap-3 text-[11px] uppercase tracking-[0.18em] text-muted">
-            <span className="h-px flex-1 bg-black/[.08]" />
+            <span className="h-px flex-1 bg-white/[.08]" />
             or
-            <span className="h-px flex-1 bg-black/[.08]" />
+            <span className="h-px flex-1 bg-white/[.08]" />
           </div>
         )}
 

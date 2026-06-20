@@ -35,16 +35,16 @@ const ARTICLES = [
 
 export default function ArticlesPage() {
   return (
-    <div className="min-h-screen bg-surface text-[#1d1d1f]">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <Nav />
       <main className="pt-32 pb-20 px-6">
         <div className="max-w-4xl mx-auto">
           <header className="mb-12">
-            <p className="font-mono text-xs text-accent-500 uppercase tracking-wider mb-4">
+            <p className="font-mono text-xs text-accent uppercase tracking-wider mb-4">
               Resources
             </p>
             <h1 className="font-display text-4xl sm:text-5xl mb-4">Articles</h1>
-            <p className="font-body text-lg text-[#6e6e73]">
+            <p className="font-body text-lg text-zinc-400">
               Practical guides for live musicians who use click tracks, cue tracks, and IEMs.
             </p>
           </header>
@@ -56,14 +56,14 @@ export default function ArticlesPage() {
                 href={`/articles/${article.slug}`}
                 className="block group"
               >
-                <div className="bg-surface-raised border border-surface-border rounded-lg p-8 transition-colors hover:border-accent-500/30">
-                  <p className="font-mono text-xs text-accent-500 uppercase tracking-wider mb-3">
+                <div className="bg-zinc-950-raised border border-surface-border rounded-lg p-8 transition-colors hover:border-accent/30">
+                  <p className="font-mono text-xs text-accent uppercase tracking-wider mb-3">
                     {article.category}
                   </p>
-                  <h2 className="font-display text-2xl mb-3 group-hover:text-accent-500 transition-colors">
+                  <h2 className="font-display text-2xl mb-3 group-hover:text-accent transition-colors">
                     {article.title}
                   </h2>
-                  <p className="font-body text-[#6e6e73] leading-relaxed">
+                  <p className="font-body text-zinc-400 leading-relaxed">
                     {article.description}
                   </p>
                 </div>

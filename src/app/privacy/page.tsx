@@ -19,14 +19,14 @@ export default function PrivacyPage() {
     <>
       <Nav />
       <main className="mx-auto max-w-3xl px-6 pt-28 pb-20">
-        <h1 className="font-display font-bold tracking-[-0.035em] text-[#1d1d1f] text-[clamp(32px,4vw,48px)] mb-3">
+        <h1 className="font-display font-bold tracking-[-0.035em] text-zinc-100 text-[clamp(32px,4vw,48px)] mb-3">
           Privacy Policy
         </h1>
-        <p className="text-[13px] text-[#6e6e73] mb-12">Effective {EFFECTIVE_DATE}</p>
+        <p className="text-[13px] text-zinc-400 mb-12">Effective {EFFECTIVE_DATE}</p>
 
-        <div className="space-y-8 text-[15px] leading-[1.7] text-[#3a3a3c]">
+        <div className="space-y-8 text-[15px] leading-[1.7] text-zinc-300">
           <section>
-            <h2 className="text-[20px] font-bold text-[#1d1d1f] mb-2">Who we are</h2>
+            <h2 className="text-[20px] font-bold text-zinc-100 mb-2">Who we are</h2>
             <p>
               Cue Track (&ldquo;we&rdquo;, &ldquo;us&rdquo;) turns an uploaded song into a
               click track with spoken section cues. This policy explains what data we
@@ -35,7 +35,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-[20px] font-bold text-[#1d1d1f] mb-2">What we collect</h2>
+            <h2 className="text-[20px] font-bold text-zinc-100 mb-2">What we collect</h2>
             <ul className="list-disc pl-5 space-y-2">
               <li>
                 <strong>Audio you upload.</strong> Your source file is uploaded to our
@@ -59,7 +59,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-[20px] font-bold text-[#1d1d1f] mb-2">How we use it</h2>
+            <h2 className="text-[20px] font-bold text-zinc-100 mb-2">How we use it</h2>
             <p>
               To analyze your audio, render and deliver your cue track, process payments,
               provide support, prevent abuse, and improve the product. We do not sell your
@@ -68,7 +68,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-[20px] font-bold text-[#1d1d1f] mb-2">Service providers</h2>
+            <h2 className="text-[20px] font-bold text-zinc-100 mb-2">Service providers</h2>
             <p>
               We share data only with the processors that run the service: Vercel
               (hosting/storage), Neon (database), Stripe (payments), Google (sign-in and
@@ -77,7 +77,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-[20px] font-bold text-[#1d1d1f] mb-2">Your rights</h2>
+            <h2 className="text-[20px] font-bold text-zinc-100 mb-2">Your rights</h2>
             <p>
               You can request access to, correction of, or deletion of your personal data,
               and you can delete your account at any time. Contact us at{' '}
@@ -89,7 +89,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-[20px] font-bold text-[#1d1d1f] mb-2">Changes</h2>
+            <h2 className="text-[20px] font-bold text-zinc-100 mb-2">Changes</h2>
             <p>
               We may update this policy; we&apos;ll revise the effective date above when we
               do. Questions? Email{' '}

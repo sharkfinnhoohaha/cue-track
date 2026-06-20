@@ -26,10 +26,10 @@ export function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
                 className={cn(
                   'flex h-6 w-6 items-center justify-center rounded-full font-mono text-[11px] font-medium',
                   isActive
-                    ? 'bg-[#1d1d1f] text-white'
+                    ? 'bg-accent text-zinc-950 font-bold'
                     : isDone
-                      ? 'bg-[#1d1d1f]/80 text-white'
-                      : 'bg-black/[.06] text-[#6e6e73]',
+                      ? 'bg-accent/80 text-zinc-950 font-bold'
+                      : 'bg-black/[.06] text-zinc-400',
                 )}
               >
                 {isDone ? '✓' : step}
@@ -37,7 +37,7 @@ export function StepIndicator({ current }: { current: 1 | 2 | 3 }) {
               <span
                 className={cn(
                   'text-[12px] font-medium',
-                  isActive ? 'text-[#1d1d1f]' : 'text-[#6e6e73]',
+                  isActive ? 'text-zinc-100' : 'text-zinc-400',
                 )}
               >
                 {label}

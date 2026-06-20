@@ -83,18 +83,18 @@ export default async function ReviewPage({ params }: ReviewPageProps) {
   return (
     <>
       <Nav />
-      <div className="border-b border-black/[.08]">
+      <div className="border-b border-white/[.08]">
         <section className="max-w-3xl mx-auto px-6 pt-20 pb-10 text-center">
           <div className="mb-8">
             <StepIndicator current={2} />
           </div>
-          <p className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-4">
+          <p className="font-mono text-[11px] tracking-[.12em] uppercase text-zinc-500 mb-4">
             Review &amp; finalize
           </p>
-          <h1 className="font-display font-bold tracking-[-0.035em] text-[#1d1d1f] mb-3 text-[clamp(28px,3.6vw,42px)]">
+          <h1 className="font-display font-bold tracking-[-0.035em] text-zinc-100 mb-3 text-[clamp(28px,3.6vw,42px)]">
             Looks like {Math.round(initialSpec.bpm)} BPM.
           </h1>
-          <p className="text-[15px] text-[#6e6e73] max-w-[520px] mx-auto leading-[1.55]">
+          <p className="text-[15px] text-zinc-400 max-w-[520px] mx-auto leading-[1.55]">
             We detected the tempo and laid out a default section template.
             Adjust anything that&apos;s off, then finalize to render your cue track.
             {track.duration
@@ -104,7 +104,7 @@ export default async function ReviewPage({ params }: ReviewPageProps) {
         </section>
       </div>
 
-      <div className="bg-[#fafafa]">
+      <div className="bg-zinc-950">
         <section className="max-w-3xl mx-auto px-6 py-12">
           <TrackForm
             isAuthenticated={isAuthenticated}

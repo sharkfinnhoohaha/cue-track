@@ -411,7 +411,7 @@ export function TrackForm({
             <label className="label font-mono text-xs uppercase tracking-wider">Click Sound</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {CLICK_SOUNDS.map((sound) => (
-                <button key={sound.id} type="button" onClick={() => update('clickSound', sound.id)} className={cn('rounded-lg border px-3 py-2.5 text-left transition-all', spec.clickSound === sound.id ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border bg-surface hover:border-black/30 text-muted hover:text-[#1d1d1f]')}>
+                <button key={sound.id} type="button" onClick={() => update('clickSound', sound.id)} className={cn('rounded-lg border px-3 py-2.5 text-left transition-all', spec.clickSound === sound.id ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border bg-surface hover:border-white/30 text-muted hover:text-zinc-100')}>
                   <span className="block text-sm font-medium">{sound.label}</span>
                   <span className="block text-xs text-muted mt-0.5">{sound.desc}</span>
                 </button>
@@ -422,7 +422,7 @@ export function TrackForm({
             <label className="label font-mono text-xs uppercase tracking-wider">Output Format</label>
             <div className="flex gap-2">
               {FORMAT_OPTIONS.map((fmt) => (
-                <button key={fmt.id} type="button" onClick={() => update('format', fmt.id)} className={cn('rounded-lg border px-5 py-2 font-mono text-sm font-medium transition-all', spec.format === fmt.id ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border text-muted hover:text-[#1d1d1f]')}>
+                <button key={fmt.id} type="button" onClick={() => update('format', fmt.id)} className={cn('rounded-lg border px-5 py-2 font-mono text-sm font-medium transition-all', spec.format === fmt.id ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border text-muted hover:text-zinc-100')}>
                   {fmt.label}
                 </button>
               ))}
@@ -439,7 +439,7 @@ export function TrackForm({
               <label className="label font-mono text-xs uppercase tracking-wider">Count-in Bars</label>
               <div className="flex gap-2">
                 {[1, 2, 3, 4].map((n) => (
-                  <button key={n} type="button" onClick={() => update('countInBars', n)} className={cn('rounded-lg border w-10 h-10 font-mono text-sm font-medium transition-all', spec.countInBars === n ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border text-muted hover:text-[#1d1d1f]')}>{n}</button>
+                  <button key={n} type="button" onClick={() => update('countInBars', n)} className={cn('rounded-lg border w-10 h-10 font-mono text-sm font-medium transition-all', spec.countInBars === n ? 'border-accent bg-accent/10 text-accent' : 'border-surface-border text-muted hover:text-zinc-100')}>{n}</button>
                 ))}
               </div>
             </div>
@@ -454,11 +454,11 @@ export function TrackForm({
           type="button"
           onClick={handlePreview}
           disabled={previewState === 'loading' || spec.sections.length === 0}
-          className="inline-flex items-center gap-2 rounded-full border border-surface-border bg-surface px-5 py-2.5 text-sm font-semibold text-[#1d1d1f] transition-colors hover:border-black/30 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full border border-surface-border bg-surface-raised px-5 py-2.5 text-sm font-semibold text-zinc-100 transition-colors hover:border-white/30 hover:bg-white/[.04] disabled:opacity-50"
         >
           {previewState === 'loading' ? (
             <>
-              <span aria-hidden="true" className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-[#1d1d1f] border-t-transparent" />
+              <span aria-hidden="true" className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-zinc-100 border-t-transparent" />
               Rendering preview…
             </>
           ) : previewState === 'playing' ? (
@@ -562,14 +562,14 @@ function SignupPromptModal({ onSignUp, onClose }: SignupPromptModalProps) {
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-3 top-3 text-2xl leading-none text-muted transition-colors hover:text-[#1d1d1f]"
+          className="absolute right-3 top-3 text-2xl leading-none text-muted transition-colors hover:text-zinc-100"
         >
           ×
         </button>
         <div className="p-6 sm:p-7">
           <h3
             id="signup-prompt-title"
-            className="font-display text-2xl font-semibold tracking-tight text-[#1d1d1f]"
+            className="font-display text-2xl font-semibold tracking-tight text-zinc-100"
           >
             Sign up to use manual mode
           </h3>
@@ -584,7 +584,7 @@ function SignupPromptModal({ onSignUp, onClose }: SignupPromptModalProps) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg px-3 py-2 font-mono text-sm text-muted transition-colors hover:text-[#1d1d1f]"
+              className="rounded-lg px-3 py-2 font-mono text-sm text-muted transition-colors hover:text-zinc-100"
             >
               Not now
             </button>
@@ -602,7 +602,7 @@ function ToggleRow({ label, description, checked, onChange }: { label: string; d
         <span className={cn('inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200', checked ? 'translate-x-4' : 'translate-x-0')} />
       </button>
       <div>
-        <span className="block text-sm font-medium text-[#1d1d1f] group-hover:text-accent transition-colors">{label}</span>
+        <span className="block text-sm font-medium text-zinc-100 group-hover:text-accent transition-colors">{label}</span>
         <span className="block text-xs text-muted">{description}</span>
       </div>
     </label>

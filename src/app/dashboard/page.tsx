@@ -78,7 +78,7 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-10">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="font-display text-4xl font-semibold tracking-tight text-[#1d1d1f]">
+              <h1 className="font-display text-4xl font-semibold tracking-tight text-zinc-100">
                 Your Tracks
               </h1>
               {isPro && (
@@ -112,7 +112,7 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
-
+ 
         {/* Loading state */}
         {loading && (
           <div className="space-y-4">
@@ -130,7 +130,7 @@ export default function DashboardPage() {
             ))}
           </div>
         )}
-
+ 
         {/* Empty state */}
         {!loading && tracks.length === 0 && (
           <Card className="py-8">
@@ -140,7 +140,7 @@ export default function DashboardPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
                 </svg>
               </div>
-              <h2 className="font-display text-xl font-semibold text-[#1d1d1f] mb-2">
+              <h2 className="font-display text-xl font-semibold text-zinc-100 mb-2">
                 No tracks yet
               </h2>
               <p className="text-sm text-muted mb-6 max-w-sm">
@@ -155,14 +155,14 @@ export default function DashboardPage() {
             </div>
           </Card>
         )}
-
+ 
         {/* Track list */}
         {!loading && tracks.length > 0 && (
           <div className="space-y-3">
             {tracks.map((track) => {
               const sectionCount = track.spec.sections.length;
               const tsLabel = `${track.spec.timeSignature.beats}/${track.spec.timeSignature.subdivision}`;
-
+ 
               return (
                 <Link
                   key={track.id}
@@ -181,10 +181,10 @@ export default function DashboardPage() {
                           <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
                         </svg>
                       </div>
-
+ 
                       {/* Track info */}
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-medium text-[#1d1d1f] truncate group-hover:text-accent transition-colors">
+                        <h3 className="text-sm font-medium text-zinc-100 truncate group-hover:text-accent transition-colors">
                           {track.title}
                         </h3>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">

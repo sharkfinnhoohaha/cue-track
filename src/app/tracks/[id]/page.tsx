@@ -100,7 +100,7 @@ function WaveformCanvas({
       const y = (h - barH) / 2;
       const isPlayed = i / barCount <= progress;
 
-      ctx.fillStyle = isPlayed ? '#C8A250' : '#2A2A2A';
+      ctx.fillStyle = isPlayed ? '#4A9D97' : '#3f3f46';
       ctx.fillRect(x + gap / 2, y, Math.max(1, barWidth - gap), barH);
     }
   }, [currentTime, duration]);
@@ -446,7 +446,7 @@ export default function TrackDetailPage() {
         <Nav />
         <main className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
           <div className="text-center py-20">
-            <h1 className="font-display text-3xl font-semibold text-[#1d1d1f] mb-3">Track Not Found</h1>
+            <h1 className="font-display text-3xl font-semibold text-zinc-100 mb-3">Track Not Found</h1>
             <p className="text-muted mb-6">{error || 'The track you are looking for does not exist.'}</p>
             <a href="/create"><Button variant="primary">Create a New Track</Button></a>
           </div>
@@ -466,7 +466,7 @@ export default function TrackDetailPage() {
         <main className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pt-28 pb-20">
           <div className="flex flex-col items-center py-20 text-center">
             <div className="mb-4 h-10 w-10 animate-spin rounded-full border-2 border-surface-border border-t-accent" />
-            <p className="text-sm text-[#1d1d1f] font-medium">Taking you to the review screen…</p>
+            <p className="text-sm text-zinc-100 font-medium">Taking you to the review screen…</p>
           </div>
         </main>
         <Footer />
@@ -491,7 +491,7 @@ export default function TrackDetailPage() {
             </span>
             <span className="badge badge-muted font-mono uppercase">{track.spec.format}</span>
           </div>
-          <h1 className="font-display text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">{track.title}</h1>
+          <h1 className="font-display text-4xl font-semibold tracking-tight text-zinc-100 sm:text-5xl">{track.title}</h1>
           <p className="mt-2 text-sm text-muted">Created {createdDate}</p>
         </div>
 
@@ -500,19 +500,19 @@ export default function TrackDetailPage() {
         )}
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mb-8">
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">BPM</p><p className="font-mono text-2xl font-bold text-[#1d1d1f] mt-1">{track.spec.bpm}</p></div></Card>
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Time Sig</p><p className="font-mono text-2xl font-bold text-[#1d1d1f] mt-1">{tsLabel}</p></div></Card>
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Sections</p><p className="font-mono text-2xl font-bold text-[#1d1d1f] mt-1">{track.spec.sections.length}</p></div></Card>
-          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Duration</p><p className="font-mono text-2xl font-bold text-[#1d1d1f] mt-1">{track.duration ? `${Math.floor(track.duration / 60)}:${String(Math.floor(track.duration % 60)).padStart(2, '0')}` : '--:--'}</p></div></Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">BPM</p><p className="font-mono text-2xl font-bold text-zinc-100 mt-1">{track.spec.bpm}</p></div></Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Time Sig</p><p className="font-mono text-2xl font-bold text-zinc-100 mt-1">{tsLabel}</p></div></Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Sections</p><p className="font-mono text-2xl font-bold text-zinc-100 mt-1">{track.spec.sections.length}</p></div></Card>
+          <Card><div className="text-center"><p className="font-mono text-xs uppercase text-muted tracking-wider">Duration</p><p className="font-mono text-2xl font-bold text-zinc-100 mt-1">{track.duration ? `${Math.floor(track.duration / 60)}:${String(Math.floor(track.duration % 60)).padStart(2, '0')}` : '--:--'}</p></div></Card>
         </div>
 
         <Card header="Section Breakdown" className="mb-8">
           <div className="space-y-2">
             {track.spec.sections.map((section, i) => (
-              <div key={section.id || i} className="flex items-center justify-between rounded-lg bg-surface px-4 py-2.5 border border-surface-border">
+              <div key={section.id || i} className="flex items-center justify-between rounded-lg bg-zinc-950/50 px-4 py-2.5 border border-surface-border">
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-xs text-muted w-6 text-center">{i + 1}</span>
-                  <span className="text-sm font-medium text-[#1d1d1f]">{section.name}</span>
+                  <span className="text-sm font-medium text-zinc-100">{section.name}</span>
                 </div>
                 <span className="font-mono text-xs text-muted">{section.bars} bars</span>
               </div>
@@ -527,10 +527,10 @@ export default function TrackDetailPage() {
           <div className="flex flex-col items-center gap-3 pt-4">
             {finalizing ? (
               <>
-                <div className="flex items-center gap-2 text-sm text-[#1d1d1f]">
+                <div className="flex items-center gap-2 text-sm text-zinc-100">
                   <span
                     aria-hidden="true"
-                    className="inline-block h-3 w-3 rounded-full border-2 border-[#1d1d1f] border-t-transparent animate-spin"
+                    className="inline-block h-3 w-3 rounded-full border-2 border-zinc-100 border-t-transparent animate-spin"
                   />
                   Finalizing your purchase…
                 </div>
@@ -541,7 +541,7 @@ export default function TrackDetailPage() {
             ) : isPaid ? (
               <>
                 <Button variant="primary" size="lg" onClick={handleDownload} loading={downloading} className="min-w-[240px] glow-accent">
-                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <svg className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z" />
                     <path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z" />
                   </svg>
@@ -551,7 +551,7 @@ export default function TrackDetailPage() {
               </>
             ) : finalizeTimedOut ? (
               <>
-                <p className="text-sm text-[#1d1d1f] font-medium text-center">
+                <p className="text-sm text-zinc-100 font-medium text-center">
                   Payment received — we&apos;re still confirming it.
                 </p>
                 <p className="text-xs text-muted max-w-[380px] text-center">
@@ -569,7 +569,7 @@ export default function TrackDetailPage() {
               </>
             ) : claimState === 'claimed' ? (
               <>
-                <p className="text-sm text-[#1d1d1f] font-medium text-center">
+                <p className="text-sm text-zinc-100 font-medium text-center">
                   ✓ Your free cue track is downloading.
                 </p>
                 <p className="text-xs text-muted max-w-[380px] text-center">
@@ -579,7 +579,7 @@ export default function TrackDetailPage() {
               </>
             ) : track.freeEligible && !freeUsed ? (
               <div className="flex w-full max-w-[420px] flex-col items-center gap-3">
-                <p className="text-sm font-medium text-[#1d1d1f] text-center">
+                <p className="text-sm font-medium text-zinc-100 text-center">
                   Your first cue track is on us — we&apos;ll email it to you free.
                 </p>
                 <input
@@ -605,7 +605,7 @@ export default function TrackDetailPage() {
                 <button
                   type="button"
                   onClick={handleCheckout}
-                  className="text-xs text-muted underline hover:text-[#1d1d1f] transition-colors"
+                  className="text-xs text-muted underline hover:text-zinc-100 transition-colors"
                 >
                   Or buy just this track for $3
                 </button>
@@ -623,13 +623,13 @@ export default function TrackDetailPage() {
 
         {track.status === 'failed' && (
           <div className="flex flex-col items-center gap-3 pt-4 text-center">
-            <p className="text-sm text-[#1d1d1f] font-medium">
+            <p className="text-sm text-zinc-100 font-medium">
               We couldn&apos;t finish rendering this track.
             </p>
             <p className="text-xs text-muted max-w-[420px]">
               This is sometimes temporary. Try creating the track again — your
               upload is quick to re-run. If it keeps failing, email{' '}
-              <a className="text-[#0066cc] hover:opacity-75" href="mailto:support@cuetrack.app">
+              <a className="text-accent hover:opacity-75" href="mailto:support@cuetrack.app">
                 support@cuetrack.app
               </a>{' '}
               and we&apos;ll take a look.

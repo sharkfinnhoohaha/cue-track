@@ -15,7 +15,7 @@
  *  - For the held-out TEST split you should replace a handful of these with
  *    human-corrected labels (the sealed test must be trustworthy). See HANDOFF.
  */
-import { writeFileSync, mkdirSync, readdirSync, statSync } from 'fs';
+import { writeFileSync, readFileSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { join, basename, relative, extname } from 'path';
 import { runDetectorHttp, resolveWorker } from './detector-http';
 import { sectionsToSegmentation } from './convert';
@@ -63,34 +63,62 @@ async function main() {
     console.error(`No audio files found under ${audioDir}.`);
     process.exit(1);
   }
-  console.error(`Labeling ${audio.length} songs with the '${which}' teacher (this can take a while on cold start)…`);
-
-  const entries: CorpusEntry[] = audio.map((a) => ({ ...a, ref: { segments: [], duration: 0 }, source: 'teacher' }));
-  const preds = await runDetectorHttp(entries, worker);
 
   const labelsDir = join(outDir, 'labels');
   mkdirSync(labelsDir, { recursive: true });
   const manifest: { id: string; audio: string; labels: string; source: string }[] = [];
   const review: { id: string; issues: string[] }[] = [];
 
-  for (const a of audio) {
-    const pred = preds.get(a.id);
-    if (!pred) {
-      review.push({ id: a.id, issues: ['teacher produced no output'] });
-      continue;
+  const missingAudio = audio.filter((a) => {
+    const labelPath = join(labelsDir, `${a.id}.sections.json`);
+    try {
+      const stats = statSync(labelPath);
+      if (stats.size > 10) {
+        const seg = JSON.parse(readFileSync(labelPath, 'utf8'));
+        manifest.push({
+          id: a.id,
+          audio: relative(outDir, a.audioPath) || a.audioPath,
+          labels: `labels/${a.id}.sections.json`,
+          source: `${which}-teacher`,
+        });
+        const structure = checkStructure(seg);
+        if (!structure.plausible) {
+          review.push({ id: a.id, issues: structure.issues.filter((i) => i.severity === 'high').map((i) => i.message) });
+        }
+        return false;
+      }
+    } catch {
+      // ignore
     }
-    const seg = sectionsToSegmentation(pred);
-    writeFileSync(join(labelsDir, `${a.id}.sections.json`), JSON.stringify(seg, null, 2));
-    manifest.push({
-      id: a.id,
-      audio: relative(outDir, a.audioPath) || a.audioPath,
-      labels: `labels/${a.id}.sections.json`,
-      source: `${which}-teacher`,
-    });
-    const structure = checkStructure(seg);
-    if (!structure.plausible) {
-      review.push({ id: a.id, issues: structure.issues.filter((i) => i.severity === 'high').map((i) => i.message) });
+    return true;
+  });
+
+  if (missingAudio.length > 0) {
+    console.error(`Labeling ${missingAudio.length} missing songs with the '${which}' teacher (concurrency=1, this can take a while on cold start)…`);
+    const entries: CorpusEntry[] = missingAudio.map((a) => ({ ...a, ref: { segments: [], duration: 0 }, source: 'teacher' }));
+    const preds = await runDetectorHttp(entries, { ...worker, concurrency: 1 });
+
+    for (const a of missingAudio) {
+      const pred = preds.get(a.id);
+      if (!pred) {
+        review.push({ id: a.id, issues: ['teacher produced no output'] });
+        continue;
+      }
+      const seg = sectionsToSegmentation(pred);
+      writeFileSync(join(labelsDir, `${a.id}.sections.json`), JSON.stringify(seg, null, 2));
+      manifest.push({
+        id: a.id,
+        audio: relative(outDir, a.audioPath) || a.audioPath,
+        labels: `labels/${a.id}.sections.json`,
+        source: `${which}-teacher`,
+      });
+      const structure = checkStructure(seg);
+      if (!structure.plausible) {
+        review.push({ id: a.id, issues: structure.issues.filter((i) => i.severity === 'high').map((i) => i.message) });
+      }
     }
+  } else {
+    console.error(`All ${audio.length} songs are already labeled.`);
   }
 
   writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));

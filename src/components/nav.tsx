@@ -53,17 +53,17 @@ export function Nav() {
     <header
       className={cn(
         'fixed top-0 inset-x-0 z-50 transition-all duration-200',
-        scrolled && 'bg-[#f5f5f7]/80 backdrop-blur-xl border-b border-black/[.08]',
+        scrolled && 'bg-[#09090b]/80 backdrop-blur-xl border-b border-white/[.08]',
       )}
     >
       <nav className="max-w-[1080px] mx-auto px-6 h-[64px] flex items-center justify-between">
         <Link
           href="/"
-          className="font-mono text-[22px] font-semibold tracking-[.04em] uppercase text-[#1d1d1f] leading-none hover:opacity-70 transition-opacity"
+          className="font-mono text-[22px] font-semibold tracking-[.04em] uppercase text-zinc-100 leading-none hover:opacity-75 transition-opacity"
         >
           Cue Track
         </Link>
-
+ 
         <ul className="hidden md:flex items-center gap-7 list-none m-0 p-0">
           {NAV_LINKS.map((link) => (
             <li key={link.href}>
@@ -72,8 +72,8 @@ export function Nav() {
                 className={cn(
                   'text-[13px] transition-colors',
                   pathname === link.href
-                    ? 'text-[#1d1d1f] font-medium'
-                    : 'text-[#6e6e73] hover:text-[#1d1d1f]',
+                    ? 'text-zinc-100 font-medium'
+                    : 'text-zinc-400 hover:text-zinc-100',
                 )}
               >
                 {link.label}
@@ -81,12 +81,12 @@ export function Nav() {
             </li>
           ))}
         </ul>
-
+ 
         <div className="hidden md:flex items-center gap-5">
           {authed === false && (
             <Link
               href="/auth/signin"
-              className="text-[13px] text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+              className="text-[13px] text-zinc-400 hover:text-zinc-100 transition-colors"
             >
               Sign in
             </Link>
@@ -95,22 +95,22 @@ export function Nav() {
             <button
               type="button"
               onClick={handleSignOut}
-              className="text-[13px] text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+              className="text-[13px] text-zinc-400 hover:text-zinc-100 transition-colors"
             >
               Sign out
             </button>
           )}
           <Link
             href="/create"
-            className="text-[13px] font-medium text-[#0066cc] hover:opacity-75 transition-opacity"
+            className="text-[13px] font-medium text-accent hover:opacity-85 transition-opacity"
           >
             Create a track →
           </Link>
         </div>
-
+ 
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="md:hidden rounded-lg p-2 text-[#6e6e73] hover:text-[#1d1d1f] hover:bg-black/[.05] transition-colors"
+          className="md:hidden rounded-lg p-2 text-zinc-400 hover:text-zinc-100 hover:bg-white/[.05] transition-colors"
           aria-label="Toggle navigation"
           aria-expanded={mobileOpen}
         >
@@ -125,14 +125,14 @@ export function Nav() {
           )}
         </button>
       </nav>
-
+ 
       {mobileOpen && (
-        <div className="md:hidden border-t border-black/[.08] bg-[#f5f5f7] px-6 pb-4 pt-3 flex flex-col gap-1">
+        <div className="md:hidden border-t border-white/[.08] bg-zinc-900 px-6 pb-4 pt-3 flex flex-col gap-1">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="py-2 text-[14px] text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+              className="py-2 text-[14px] text-zinc-400 hover:text-zinc-100 transition-colors"
             >
               {link.label}
             </Link>
@@ -140,7 +140,7 @@ export function Nav() {
           {authed === false && (
             <Link
               href="/auth/signin"
-              className="py-2 text-[14px] text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+              className="py-2 text-[14px] text-zinc-400 hover:text-zinc-100 transition-colors"
             >
               Sign in
             </Link>
@@ -149,14 +149,14 @@ export function Nav() {
             <button
               type="button"
               onClick={handleSignOut}
-              className="py-2 text-left text-[14px] text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+              className="py-2 text-left text-[14px] text-zinc-400 hover:text-zinc-100 transition-colors"
             >
               Sign out
             </button>
           )}
           <Link
             href="/create"
-            className="mt-2 inline-flex text-[14px] font-medium text-[#0066cc]"
+            className="mt-2 inline-flex text-[14px] font-medium text-accent hover:opacity-85"
           >
             Create a track →
           </Link>

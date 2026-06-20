@@ -327,14 +327,14 @@ export function UploadForm() {
   if (paywall) {
     return (
       <div className="mx-auto max-w-[640px]">
-        <div className="rounded-2xl border border-black/[.08] bg-white p-10 text-center">
-          <p className="font-mono text-[11px] tracking-[.12em] uppercase text-[#6e6e73] mb-3">
+        <div className="rounded-2xl border border-white/[.08] bg-zinc-900 p-10 text-center">
+          <p className="font-mono text-[11px] tracking-[.12em] uppercase text-zinc-500 mb-3">
             You&apos;ve used your free analysis
           </p>
-          <h3 className="font-display font-bold tracking-[-0.03em] text-[#1d1d1f] mb-3 text-[clamp(22px,3vw,30px)]">
+          <h3 className="font-display font-bold tracking-[-0.03em] text-zinc-100 mb-3 text-[clamp(22px,3vw,30px)]">
             Go Pro for unlimited analyses
           </h3>
-          <p className="text-[14px] text-[#6e6e73] max-w-[460px] mx-auto mb-7 leading-[1.55]">
+          <p className="text-[14px] text-zinc-400 max-w-[460px] mx-auto mb-7 leading-[1.55]">
             Your first track analysis is on us. To analyze more songs, subscribe
             to Pro — unlimited uploads &amp; analyses, plus Studio voices.
             Finished a track already? You can still download it for $3.
@@ -342,21 +342,21 @@ export function UploadForm() {
           <div className="flex flex-col items-center gap-4">
             <Link
               href="/pricing"
-              className="inline-flex items-center justify-center rounded-full bg-[#1d1d1f] px-7 py-3 text-[15px] font-semibold text-white hover:opacity-85 transition-opacity glow-accent"
+              className="inline-flex items-center justify-center rounded-full bg-accent px-7 py-3 text-[15px] font-bold text-zinc-950 hover:opacity-90 transition-opacity glow-accent"
             >
               Go Pro — $19/mo
             </Link>
             <div className="flex items-center gap-5 text-[12px]">
               <Link
                 href="/auth/signin?callbackUrl=/create"
-                className="text-[#0066cc] hover:opacity-75 transition-opacity"
+                className="text-accent hover:opacity-75 transition-opacity"
               >
                 Already Pro? Sign in
               </Link>
               <button
                 type="button"
                 onClick={reset}
-                className="text-[#6e6e73] hover:text-[#1d1d1f] transition-colors"
+                className="text-zinc-400 hover:text-zinc-100 transition-colors"
               >
                 Pick a different file
               </button>
@@ -374,10 +374,10 @@ export function UploadForm() {
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         className={cn(
-          'rounded-2xl border-2 border-dashed bg-white p-10 text-center transition-colors',
+          'rounded-2xl border-2 border-dashed bg-zinc-900/40 p-10 text-center transition-colors',
           isDragging
-            ? 'border-[#1d1d1f] bg-[#f5f5f7]'
-            : 'border-black/[.15] hover:border-black/[.3]',
+            ? 'border-accent bg-accent/5'
+            : 'border-white/[.12] hover:border-white/[.24]',
         )}
       >
         <svg
@@ -386,7 +386,7 @@ export function UploadForm() {
           height="40"
           viewBox="0 0 40 40"
           fill="none"
-          className="mx-auto mb-4 text-[#6e6e73]"
+          className="mx-auto mb-4 text-zinc-400"
         >
           <path
             d="M20 26V8m0 0l-7 7m7-7l7 7M8 28v2a4 4 0 004 4h16a4 4 0 004-4v-2"
@@ -399,16 +399,16 @@ export function UploadForm() {
 
         {!file && (
           <>
-            <p className="text-[17px] font-semibold text-[#1d1d1f] mb-1.5">
+            <p className="text-[17px] font-semibold text-zinc-100 mb-1.5">
               Drop your track here
             </p>
-            <p className="text-[13px] text-[#6e6e73] mb-5">
+            <p className="text-[13px] text-zinc-400 mb-5">
               MP3, WAV, M4A, AAC, OGG, or FLAC. Up to {Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB
             </p>
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="inline-flex items-center px-5 py-2.5 bg-[#1d1d1f] text-[#f5f5f7] text-[14px] font-semibold rounded-full hover:opacity-80 transition-opacity"
+              className="inline-flex items-center px-5 py-2.5 bg-accent text-zinc-950 text-[14px] font-bold rounded-full hover:opacity-90 transition-opacity"
             >
               Choose file
             </button>
@@ -424,40 +424,40 @@ export function UploadForm() {
 
         {file && (
           <>
-            <p className="text-[15px] font-medium text-[#1d1d1f] mb-1">{file.name}</p>
-            <p className="text-[12px] text-[#6e6e73] mb-5">
+            <p className="text-[15px] font-medium text-zinc-100 mb-1">{file.name}</p>
+            <p className="text-[12px] text-zinc-400 mb-5">
               {(file.size / (1024 * 1024)).toFixed(1)} MB
             </p>
             {isTranscoding ? (
               <div className="flex flex-col items-center gap-3">
-                <div className="flex items-center gap-2 text-[14px] text-[#1d1d1f]">
+                <div className="flex items-center gap-2 text-[14px] text-zinc-100">
                   <span
                     aria-hidden="true"
-                    className="inline-block h-3 w-3 rounded-full border-2 border-[#1d1d1f] border-t-transparent animate-spin"
+                    className="inline-block h-3 w-3 rounded-full border-2 border-zinc-100 border-t-transparent animate-spin"
                   />
                   Preparing your file...
                 </div>
-                <p className="text-[12px] text-[#6e6e73] max-w-[360px]">
+                <p className="text-[12px] text-zinc-400 max-w-[360px]">
                   Decoding {file.name.split('.').pop()?.toUpperCase()} to WAV in your browser before upload.
                 </p>
               </div>
             ) : isAnalyzing ? (
               <div className="flex flex-col items-center gap-3">
-                <div className="flex items-center gap-2 text-[14px] text-[#1d1d1f]">
+                <div className="flex items-center gap-2 text-[14px] text-zinc-100">
                   <span
                     aria-hidden="true"
-                    className="inline-block h-3 w-3 rounded-full border-2 border-[#1d1d1f] border-t-transparent animate-spin"
+                    className="inline-block h-3 w-3 rounded-full border-2 border-zinc-100 border-t-transparent animate-spin"
                   />
                   Analyzing your track...
                 </div>
-                <p className="text-[12px] text-[#6e6e73] max-w-[360px]">
+                <p className="text-[12px] text-zinc-400 max-w-[360px]">
                   Most songs take 10 to 90 seconds. Longer tracks can take a
                   couple of minutes, so keep this tab open.
                 </p>
                 <button
                   type="button"
                   onClick={cancelAnalyze}
-                  className="text-[12px] text-[#6e6e73] underline hover:text-[#1d1d1f] transition-colors"
+                  className="text-[12px] text-zinc-400 underline hover:text-zinc-100 transition-colors"
                 >
                   Cancel
                 </button>
@@ -467,14 +467,14 @@ export function UploadForm() {
                 <button
                   type="button"
                   onClick={handleAnalyze}
-                  className="inline-flex items-center px-5 py-2.5 bg-[#1d1d1f] text-[#f5f5f7] text-[14px] font-semibold rounded-full hover:opacity-80 transition-opacity"
+                  className="inline-flex items-center px-5 py-2.5 bg-accent text-zinc-950 text-[14px] font-bold rounded-full hover:opacity-90 transition-opacity"
                 >
                   Analyze track
                 </button>
                 <button
                   type="button"
                   onClick={reset}
-                  className="text-[13px] text-[#6e6e73] hover:text-[#1d1d1f]"
+                  className="text-[13px] text-zinc-400 hover:text-zinc-100"
                 >
                   Choose different file
                 </button>

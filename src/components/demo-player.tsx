@@ -49,9 +49,9 @@ export function DemoPlayer() {
       type="button"
       onClick={toggle}
       aria-label={state === 'playing' ? 'Stop the sample cue track' : 'Play a 15-second sample cue track'}
-      className="inline-flex items-center gap-2 font-mono text-[12px] tracking-[.04em] text-[#1d1d1f] hover:opacity-70 transition-opacity"
+      className="inline-flex items-center gap-2 font-mono text-[12px] tracking-[.04em] text-zinc-100 hover:opacity-70 transition-opacity"
     >
-      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#1d1d1f] text-white">
+      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-accent text-zinc-950 font-bold">
         {state === 'loading' ? (
           <span aria-hidden="true" className="inline-block h-2.5 w-2.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
         ) : state === 'playing' ? (
