@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cue Track — Section Detection → 90%: Runbook</title>
+<style>
+  :root{
+    --ink:#1d1d1f; --muted:#6e6e73; --line:rgba(0,0,0,.10); --surface:#f5f5f7;
+    --accent:#0066cc; --good:#1f9d55; --warn:#b25000; --bad:#c0392b;
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#fff;color:var(--ink);font-family:var(--sans);line-height:1.55;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:48px 24px 80px}
+  header h1{font-size:clamp(28px,4vw,42px);font-weight:800;letter-spacing:-.03em;margin:0 0 8px}
+  header p{color:var(--muted);font-size:17px;max-width:680px;margin:0}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+          color:var(--muted);margin:0 0 14px}
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;
+     color:var(--muted);margin:56px 0 18px;border-bottom:1px solid var(--line);padding-bottom:8px}
+  /* pipeline */
+  .pipe{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px;margin:8px 0 6px}
+  .node{flex:1 1 150px;min-width:150px;background:var(--surface);border:1px solid var(--line);
+        border-radius:12px;padding:14px 14px 12px}
+  .node .n{font-family:var(--mono);font-size:11px;color:var(--accent);font-weight:600}
+  .node h3{margin:6px 0 4px;font-size:15px;font-weight:700;letter-spacing:-.01em}
+  .node p{margin:0;font-size:12.5px;color:var(--muted)}
+  .arrow{align-self:center;color:#b0b0b5;font-size:20px;flex:0 0 auto}
+  .loopback{font-family:var(--mono);font-size:12px;color:var(--warn);text-align:center;
+            margin:6px 0 0;border-top:1px dashed var(--line);padding-top:10px}
+  .loopback b{color:var(--ink)}
+  /* callout */
+  .callout{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;
+           background:#f7faff;padding:18px 20px;margin:14px 0}
+  .callout.warn{border-left-color:var(--warn);background:#fff8f1}
+  .callout h3{margin:0 0 8px;font-size:15px}
+  .callout ol,.callout ul{margin:8px 0 0;padding-left:20px}
+  .callout li{margin:5px 0;font-size:14px}
+  /* steps */
+  .step{display:flex;gap:16px;padding:18px 0;border-bottom:1px solid var(--line)}
+  .step:last-child{border-bottom:0}
+  .dot{flex:0 0 32px;height:32px;width:32px;border-radius:50%;background:var(--ink);color:#fff;
+       display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
+  .step .body{flex:1;min-width:0}
+  .step h3{margin:4px 0 6px;font-size:17px;font-weight:700;letter-spacing:-.01em}
+  .step p{margin:0 0 10px;font-size:14.5px;color:#3a3a3c}
+  .who{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+       text-transform:uppercase;padding:2px 8px;border-radius:999px;margin-left:8px;vertical-align:middle}
+  .who.you{background:#eef6ff;color:var(--accent)}
+  .who.agent{background:#eefaf1;color:var(--good)}
+  pre{position:relative;background:var(--ink);color:#f5f5f7;border-radius:10px;padding:14px 16px;
+      overflow:auto;font-family:var(--mono);font-size:12.5px;line-height:1.6;margin:0}
+  pre code{white-space:pre}
+  .copy{position:absolute;top:8px;right:8px;background:rgba(255,255,255,.12);color:#fff;border:0;
+        border-radius:6px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;padding:5px 8px;
+        cursor:pointer;text-transform:uppercase}
+  .copy:hover{background:rgba(255,255,255,.22)}
+  /* checklist */
+  .check{list-style:none;padding:0;margin:0}
+  .check li{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+  .check li:last-child{border-bottom:0}
+  .box{flex:0 0 18px;height:18px;width:18px;border:2px solid var(--accent);border-radius:5px;margin-top:2px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 4px;font-size:12.5px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .chip{width:11px;height:11px;border-radius:3px;display:inline-block}
+  footer{margin-top:60px;color:var(--muted);font-size:12.5px;font-family:var(--mono)}
+  code.inline{background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:1px 6px;
+              font-family:var(--mono);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="kicker">Cue Track · ML Ops Runbook</p>
+    <h1>Get section detection to 90% — for real</h1>
+    <p>The plan to make the detector reliably find the intro, verses, choruses, bridge and
+       outro. The grader is built so the loop <b>can’t fake</b> the number: 90% here means
+       genuinely 90% on songs it never tuned on.</p>
+  </header>
+
+  <h2>The pipeline at a glance</h2>
+  <div class="pipe">
+    <div class="node"><div class="n">01</div><h3>Audio</h3><p>~25–50 songs in a folder. Your own / Billboard-like.</p></div>
+    <div class="arrow">→</div>
+    <div class="node"><div class="n">02</div><h3>Auto-label</h3><p>allin1 “teacher” writes reference labels. No hand-labeling.</p></div>
+    <div class="arrow">→</div>
+    <div class="node"><div class="n">03</div><h3>Sealed split</h3><p>dev (tune) vs test (locked, never tuned on).</p></div>
+    <div class="arrow">→</div>
+    <div class="node"><div class="n">04</div><h3>Detect + Grade</h3><p>Run Foote → score vs labels + flag “7 verses” instantly.</p></div>
+    <div class="arrow">→</div>
+    <div class="node"><div class="n">05</div><h3>Improve</h3><p>One general fix (repetition labeler / constraint / param).</p></div>
+    <div class="arrow">→</div>
+    <div class="node" style="border-color:var(--good)"><div class="n" style="color:var(--good)">✓</div><h3>≥ 90% on test</h3><p>Ship the config / route to allin1.</p></div>
+  </div>
+  <p class="loopback">↻ &nbsp;Steps 04 → 05 repeat. <b>Every 10 iterations you grade a batch</b>; the agent keeps only changes that improve <b>dev</b> and hold on the sealed <b>test</b>.</p>
+
+  <h2>The rule that keeps it honest</h2>
+  <div class="callout warn">
+    <h3>Plausibility ≠ accuracy, and you never tune on the test set</h3>
+    <ul>
+      <li><b>Sanity checks</b> (“does this look like a real song?”) catch obvious errors — 7 verses, a dozen choruses — <i>instantly, with no labels</i>. They trigger a retry. They are <b>never</b> part of the score, or the model could win by always printing a textbook structure.</li>
+      <li><b>Accuracy</b> is only ever measured against ground-truth labels, on a <b>locked test split</b> the loop can’t touch (a per-song hash + an evaluation budget enforce it).</li>
+      <li>So a reported 90% is real — not a model that learned to please the grader.</li>
+    </ul>
+  </div>
+
+  <h2>Do it — step by step</h2>
+
+  <div class="step">
+    <div class="dot">1</div>
+    <div class="body">
+      <h3>Deploy the allin1 worker <span class="who you">you, once</span></h3>
+      <p>It’s the teacher (auto-labels) and possibly the answer (if it’s already ≥90%, route to it). One build (~30&nbsp;min the first time). Full notes in <code class="inline">services/ml-worker/DEPLOY.md</code>.</p>
+      <pre><button class="copy">copy</button><code>openssl rand -hex 32 > ~/.cuetrack-ml-worker-secret && chmod 600 ~/.cuetrack-ml-worker-secret
+
+gcloud run deploy cuetrack-ml-worker \
+  --source services/ml-worker --region us-east1 --project overlook-works \
+  --port 8080 --memory 4Gi --cpu 2 --timeout 300s \
+  --min-instances 0 --max-instances 5 --no-cpu-throttling --allow-unauthenticated \
+  --set-env-vars="WORKER_SHARED_SECRET=$(cat ~/.cuetrack-ml-worker-secret)"</code></pre>
+      <p style="margin-top:10px">Then set <code class="inline">ML_WORKER_URL</code> + <code class="inline">ML_WORKER_SHARED_SECRET</code> in your shell (and Vercel), keep <code class="inline">ANALYZE_AB_SPLIT_PERCENT=0</code> until measured.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="dot">2</div>
+    <div class="body">
+      <h3>Drop in audio &amp; auto-label it <span class="who agent">agent</span></h3>
+      <p>Put the songs in <code class="inline">corpus/audio/</code>. The teacher labels them all and flags any that look implausible (so you trust it before relying on it).</p>
+      <pre><button class="copy">copy</button><code>npm install
+ML_WORKER_URL=… ML_WORKER_SHARED_SECRET=… \
+  npx tsx eval/sections/label-with-teacher.ts --audio corpus/audio --out corpus</code></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="dot">3</div>
+    <div class="body">
+      <h3>Make the test set trustworthy <span class="who you">you, ~15 min</span></h3>
+      <p>Correct ~8 of the <b>test-split</b> songs’ labels by hand (allin1’s silver → gold) so the held-out number is real. The agent tells you which songs are in test; you fix those label files.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="dot">4</div>
+    <div class="body">
+      <h3>Measure allin1 — you might be done <span class="who agent">agent</span></h3>
+      <p>If allin1 already clears 90%, the fastest win is to route users to it — no detector surgery needed.</p>
+      <pre><button class="copy">copy</button><code>npx tsx eval/sections/run-eval.ts --corpus corpus --split test --allow-test \
+  --via http --detector ml</code></pre>
+      <p style="margin-top:10px">≥90% &amp; clean guards → set <code class="inline">ANALYZE_AB_SPLIT_PERCENT=100</code> and stop. Otherwise → the loop.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="dot">5</div>
+    <div class="body">
+      <h3>Run the improvement loop <span class="who agent">agent</span></h3>
+      <p>Baseline Foote, then iterate: read the worst songs &amp; the “7 verses” flags, make one <i>general</i> fix (the repetition-based chorus labeler is the big one), keep it only if dev improves and the sealed test holds. Grade a batch every ~10 iterations.</p>
+      <pre><button class="copy">copy</button><code># baseline + instant structural flags
+npx tsx eval/sections/run-eval.ts --corpus corpus --split dev
+
+# test a constraint's effect on accuracy (A/B)
+npx tsx eval/sections/run-eval.ts --corpus corpus --split dev --postprocess
+
+# unattended parameter search for a few hours
+npx tsx eval/sections/tune.ts --corpus corpus --minutes 180 --target 0.9</code></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="dot">6</div>
+    <div class="body">
+      <h3>Confirm on the held-out set &amp; ship <span class="who agent">agent</span></h3>
+      <p>Only a green test run counts. Open a PR with the winning Foote config; you flip it on the worker.</p>
+      <pre><button class="copy">copy</button><code>npx tsx eval/sections/run-eval.ts --corpus corpus --split test --allow-test
+# meetsTarget: true  →  done</code></pre>
+    </div>
+  </div>
+
+  <h2>Hand it to the agent</h2>
+  <div class="callout">
+    <h3>One-line kickoff for an autonomous agent (Antigravity / Claude Code, run locally)</h3>
+    <p style="margin:0 0 6px;font-size:14px">Point it at the repo with the audio present and give it:</p>
+    <pre><button class="copy">copy</button><code>Read eval/sections/HANDOFF.md and execute it. Drive section detection to
+≥90% on the sealed test split, honestly. Obey every rule in that file —
+never tune on test, never let plausibility count as accuracy, keep tsc +
+tests green, and only edit the detector + eval tooling. Log each iteration
+to eval/sections/runs/handoff-log.md and stop to involve me at the
+checkpoints it names.</code></pre>
+  </div>
+
+  <h2>Definition of done</h2>
+  <div class="legend">
+    <span><i class="chip" style="background:#eef6ff;border:1px solid var(--accent)"></i>you</span>
+    <span><i class="chip" style="background:#eefaf1;border:1px solid var(--good)"></i>agent</span>
+  </div>
+  <ul class="check">
+    <li><span class="box"></span> allin1 ML worker deployed &amp; reachable (<code class="inline">ML_WORKER_URL</code> set)</li>
+    <li><span class="box"></span> ~25–50 songs in <code class="inline">corpus/audio/</code>, auto-labeled by the teacher</li>
+    <li><span class="box"></span> ~8 test-split songs hand-corrected to gold</li>
+    <li><span class="box"></span> allin1 measured — routed to it if it already clears 90%</li>
+    <li><span class="box"></span> loop run; each kept change improves dev &amp; holds on test (no overfitting)</li>
+    <li><span class="box"></span> <code class="inline">run-eval --split test</code> reports <code class="inline">meetsTarget: true</code> with a small dev→test gap</li>
+    <li><span class="box"></span> winning config shipped (worker env / <code class="inline">ANALYZE_AB_SPLIT_PERCENT</code>)</li>
+  </ul>
+
+  <footer>
+    Engine: <code class="inline">eval/sections/</code> · Brief: <code class="inline">HANDOFF.md</code> · Grader is cheat-proofed in <code class="inline">grade.test.ts</code>.
+    Plausibility is a sanity gate, never the score.
+  </footer>
+</div>
+
+<script>
+  // Offline copy-to-clipboard for each command block.
+  document.querySelectorAll('.copy').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var code = btn.parentElement.querySelector('code').innerText;
+      navigator.clipboard.writeText(code).then(function(){
+        var old = btn.textContent; btn.textContent = 'copied';
+        setTimeout(function(){ btn.textContent = old; }, 1200);
+      }).catch(function(){ btn.textContent = 'select+copy'; });
+    });
+  });
+</script>
+</body>
+</html>
