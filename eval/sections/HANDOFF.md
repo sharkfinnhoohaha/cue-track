@@ -96,9 +96,11 @@ Repeat until the stop condition:
 1. Run `run-eval --split dev`. Read the `implausible` songs and `worst10`.
 2. **Diagnose the dominant error class.** Examples and the likely fix:
    - *"7 verses" / too many verses, too few choruses* → the labeler isn't
-     recognizing repetition. Implement/extend the **repetition-based chorus
-     labeler** in `foote-analyze.ts`: sections whose audio recurs (same SSM
-     cluster) are the chorus; the most-repeated cluster = chorus.
+     weighting repetition. A **repetition-aware chorus labeler** already exists
+     (`section-labeling.ts`, gated by `FOOTE_REPETITION_WEIGHT`, default 0 =
+     legacy energy-only). First just sweep that weight up (the tuner already
+     includes it); if it's not enough, extend the labeler (e.g. lower the SSM
+     cluster threshold so repeats actually group, or feature-weight tweaks).
    - *over-segmentation / tiny spurious sections* → tune `FOOTE_PEAK_THRESHOLD_K`
      up and/or `--postprocess` (merge-adjacent + absorb-short), MEASURED.
    - *boundaries consistently late/early* → kernel size / novelty smoothing.

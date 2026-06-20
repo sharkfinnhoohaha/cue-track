@@ -29,6 +29,7 @@ import {
   type AnalyzeResult,
   type SuggestedSection,
 } from './analyze.ts';
+import { assignClusterLabels, type ClusterStat } from './section-labeling.ts';
 
 // Detector parameters. Defaults are the tuned production values; each can be
 // overridden by an env var so the offline tuning loop (eval/sections/tune.ts)
@@ -577,16 +578,11 @@ function sectionsFromBoundaries(
         nextClusterId++;
       }
 
-      // 2. Compute Cluster dynamic stats & scores
-      interface ClusterStats {
-        id: number;
-        avgRms: number;
-        avgHfc: number;
-        score: number;
-        label: 'Verse' | 'Chorus';
-      }
-
-      const clusters: ClusterStats[] = [];
+      // 2. Per-cluster acoustic stats + repetition counts, then Verse/Chorus
+      //    labels. Energy-only by default (legacy behavior); repetition-aware
+      //    when FOOTE_REPETITION_WEIGHT > 0 — choruses repeat, so the most-
+      //    recurring cluster is pushed toward Chorus. See section-labeling.ts.
+      const clusterStats: ClusterStat[] = [];
       for (let c = 0; c < nextClusterId; c++) {
         let sumRms = 0;
         let sumHfc = 0;
@@ -599,48 +595,18 @@ function sectionsFromBoundaries(
             count++;
           }
         }
-        clusters.push({
+        clusterStats.push({
           id: c,
           avgRms: count > 0 ? sumRms / count : 0,
           avgHfc: count > 0 ? sumHfc / count : 0,
-          score: 0,
-          label: 'Verse',
+          count,
         });
       }
 
-      // Normalize scores
-      const maxRms = Math.max(...clusters.map((c) => c.avgRms));
-      const maxHfc = Math.max(...clusters.map((c) => c.avgHfc));
-
-      for (const c of clusters) {
-        const normRms = maxRms > 0 ? c.avgRms / maxRms : 0;
-        const normHfc = maxHfc > 0 ? c.avgHfc / maxHfc : 0;
-        c.score = 0.5 * normRms + 0.5 * normHfc;
-      }
-
-      // Sort clusters by score
-      const sortedClusters = [...clusters].sort((a, b) => a.score - b.score);
-
-      // Assign labels
-      if (sortedClusters.length === 1) {
-        sortedClusters[0]!.label = 'Verse';
-      } else if (sortedClusters.length === 2) {
-        sortedClusters[0]!.label = 'Verse';
-        sortedClusters[1]!.label = 'Chorus';
-      } else {
-        const verseScore = sortedClusters[0]!.score;
-        const chorusScore = sortedClusters[sortedClusters.length - 1]!.score;
-        const midRange = chorusScore - verseScore;
-
-        sortedClusters[0]!.label = 'Verse';
-        sortedClusters[sortedClusters.length - 1]!.label = 'Chorus';
-
-        for (let idx = 1; idx < sortedClusters.length - 1; idx++) {
-          const c = sortedClusters[idx]!;
-          const relScore = midRange > 0 ? (c.score - verseScore) / midRange : 0.5;
-          c.label = relScore >= 0.5 ? 'Chorus' : 'Verse';
-        }
-      }
+      const labelMap = assignClusterLabels(
+        clusterStats,
+        envNum('FOOTE_REPETITION_WEIGHT', 0),
+      );
 
       // Map cluster labels back to middle sections
       const middleLabels = sections.map((sec, idx) => {
@@ -648,8 +614,7 @@ function sectionsFromBoundaries(
         if (idx === sections.length - 1) return 'Outro';
 
         const cId = clusterIds[idx - 1]!;
-        const cluster = clusters.find((cl) => cl.id === cId)!;
-        return cluster.label;
+        return labelMap.get(cId) ?? 'Verse';
       });
 
       // 3. Identify Bridge:

@@ -34,6 +34,9 @@ const SPACE: Record<string, [number, number, boolean]> = {
   FOOTE_CLUSTER_SIM_THRESHOLD: [0.7, 0.92, false],
   FOOTE_MIN_GAP_BARS_SLOW: [4, 8, true],
   FOOTE_MIN_GAP_BARS_FAST: [6, 12, true],
+  // Repetition-aware chorus labeling: 0 = legacy energy-only, 1 = pure
+  // repetition. Sweeping this is the fix for "everything is a verse".
+  FOOTE_REPETITION_WEIGHT: [0, 1, false],
 };
 
 function sampleConfig(rng: () => number): Record<string, string> {
