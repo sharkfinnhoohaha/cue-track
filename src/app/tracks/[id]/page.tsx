@@ -8,6 +8,7 @@ import { Footer } from '@/components/footer';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
+import { PayPalSingleTrackButton, isPaypalEnabled } from '@/components/paypal-buttons';
 
 // ---------- Waveform Visualization ----------
 
@@ -616,6 +617,23 @@ export default function TrackDetailPage() {
                   Download Full Track &mdash; $3
                 </Button>
                 <p className="text-xs text-muted">One-time payment. No subscription required.</p>
+                {isPaypalEnabled() && (
+                  <div className="w-full max-w-[300px] mt-2">
+                    <p className="text-xs text-muted text-center mb-2">or pay with</p>
+                    <PayPalSingleTrackButton
+                      trackId={trackId}
+                      email={track?.email ?? undefined}
+                      onSuccess={(downloadUrl) => {
+                        if (downloadUrl) {
+                          window.location.href = downloadUrl;
+                        } else {
+                          router.refresh();
+                        }
+                      }}
+                      onError={(msg) => setError(msg)}
+                    />
+                  </div>
+                )}
               </>
             )}
           </div>
