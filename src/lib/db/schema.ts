@@ -68,8 +68,23 @@ export const purchases = pgTable('purchases', {
   trackId: uuid('track_id')
     .notNull()
     .references(() => tracks.id, { onDelete: 'cascade' }),
-  stripeSessionId: text('stripe_session_id').notNull().unique(),
+  // Payment provider: 'stripe' (default, back-compat for existing rows) or
+  // 'paypal'. Single-track purchases can come from either provider; the
+  // webhook/capture handlers key off this to know which provider column
+  // holds the transaction identifier.
+  provider: text('provider').notNull().default('stripe'),
+  // Nullable since PayPal purchases have no Stripe session id. A UNIQUE
+  // constraint is intentionally NOT applied to nullable stripeSessionId
+  // values — Postgres allows multiple NULLs in a unique column, so PayPal
+  // rows coexist without conflict. The UNIQUE index below on a COALESCE
+  // expression preserves idempotency for non-null Stripe sessions.
+  stripeSessionId: text('stripe_session_id'),
   stripePaymentIntent: text('stripe_payment_intent'),
+  // PayPal order id for single-track PayPal purchases. Unique constraint
+  // makes the capture endpoint idempotent: a second capture of the same
+  // PayPal order id hits the constraint and is treated as "already
+  // processed" rather than duplicating the purchase row.
+  paypalOrderId: text('paypal_order_id').unique(),
   status: purchaseStatusEnum('status').notNull().default('pending'),
   email: text('email').notNull(),
   amountCents: integer('amount_cents').notNull(),

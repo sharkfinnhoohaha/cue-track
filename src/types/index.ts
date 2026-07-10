@@ -145,8 +145,13 @@ export interface TracksListResponse {
 export interface PurchaseRecord {
   id: string;
   trackId: string;
-  stripeSessionId: string;
+  /** Payment provider: 'stripe' or 'paypal'. */
+  provider: 'stripe' | 'paypal';
+  /** Stripe checkout session id (null for PayPal purchases). */
+  stripeSessionId: string | null;
   stripePaymentIntent: string | null;
+  /** PayPal order id (null for Stripe purchases). */
+  paypalOrderId: string | null;
   status: PurchaseStatus;
   email: string;
   amountCents: number;

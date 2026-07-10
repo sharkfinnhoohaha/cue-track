@@ -6,6 +6,7 @@ import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
+import { paypalClientId } from '@/components/paypal-provider';
 
 // ---------- Data ----------
 
@@ -129,6 +130,9 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 export default function PricingPage() {
   const [proLoading, setProLoading] = useState(false);
   const [proError, setProError] = useState<string | null>(null);
+  const [paypalProLoading, setPaypalProLoading] = useState(false);
+  const [paypalProError, setPaypalProError] = useState<string | null>(null);
+  const paypalEnabled = paypalClientId() !== null;
 
   const handleStartPro = async () => {
     setProLoading(true);
@@ -159,6 +163,37 @@ export default function PricingPage() {
         err instanceof Error ? err.message : 'Could not start Pro checkout.',
       );
       setProLoading(false);
+    }
+  };
+
+  const handleStartProPaypal = async () => {
+    setPaypalProLoading(true);
+    setPaypalProError(null);
+    try {
+      const res = await fetch('/api/paypal/create-subscription', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (res.status === 401) {
+        window.location.href = `/auth/signin?callbackUrl=${encodeURIComponent('/pricing')}`;
+        return;
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || `PayPal subscription failed (${res.status})`);
+      }
+      const data = (await res.json()) as { approvalUrl?: string };
+      if (data.approvalUrl) {
+        window.location.href = data.approvalUrl;
+      } else {
+        throw new Error('PayPal did not return an approval URL');
+      }
+    } catch (err) {
+      setPaypalProError(
+        err instanceof Error ? err.message : 'Could not start PayPal Pro checkout.',
+      );
+      setPaypalProLoading(false);
     }
   };
 
@@ -231,6 +266,27 @@ export default function PricingPage() {
                     </Button>
                     {proError && (
                       <p className="mt-3 text-xs text-red-600 text-center">{proError}</p>
+                    )}
+                    {paypalEnabled && (
+                      <>
+                        <div className="my-3 flex items-center gap-3 text-xs text-muted">
+                          <span className="h-px flex-1 bg-surface-border" />
+                          <span>or</span>
+                          <span className="h-px flex-1 bg-surface-border" />
+                        </div>
+                        <Button
+                          variant="secondary"
+                          size="lg"
+                          className="w-full"
+                          onClick={handleStartProPaypal}
+                          loading={paypalProLoading}
+                        >
+                          Pay with PayPal
+                        </Button>
+                        {paypalProError && (
+                          <p className="mt-3 text-xs text-red-600 text-center">{paypalProError}</p>
+                        )}
+                      </>
                     )}
                   </>
                 ) : (
